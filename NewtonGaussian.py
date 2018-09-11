@@ -33,13 +33,9 @@ def __derivs(recon):
 
 
 def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
-               guess=None, gt=None, RECORD=None, tol=1e-4, min_iter=1):
-    if RECORD is None:
-        c, E, F, nAtoms, max_iter, plotter, plt = _startup(
-            recon, data, max_iter, view, guess, gt, RECORD, 1)
-    else:
-        c, E, F, nAtoms, max_iter, plotter, plt, writer = _startup(
-            recon, data, max_iter, view, guess, gt, RECORD, 1)
+               guess=None, tol=1e-4, min_iter=1, myderivs=__derivs, **kwargs):
+    c, E, F, nAtoms, max_iter, plot = _startup(
+        recon, data, max_iter, view, guess, 1, **kwargs)
     eps = 1e-4
 
     # Stepsizes
@@ -53,7 +49,7 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
     else:
         n = 1
 
-    dim, iso, derivs = __derivs(recon)
+    dim, iso, derivs = myderivs(recon)
 
     random.seed(1)
     jj = 1
@@ -67,6 +63,7 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
         elif guess is not None:
             recon[n - 1] = guess(data - Radon(recon[:n]),
                                  recon[n - 1])
+#             recon.I[n - 1] = 0
             R = Radon(recon[:n])
             F[jj - 1] = fidelity(R, data)
             E[jj - 1] = F[jj - 1] + reg(recon[:n])
@@ -87,15 +84,15 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
                     ddf += reg.hess(recon[j])
 
                     H = 1 / h[j]
-#                         H = max(0, H - eigvalsh(ddf).min())
+#                     H = max(0, H - eigvalsh(ddf).min())
                     for i in range(ddf.shape[0]):
                         ddf[i, i] += H
 
                     try:
                         dx = solve(ddf, -df)
-                    except Exception:
-                        break
-#                         c.set(recon.I[j:j + 1], I + dx[0])
+                    except Exception as e:
+                        raise e
+#                     c.set(recon.I[j:j + 1], I + dx[0])
                     c.set(recon.x[j], x + dx[1:dim + 1])
 #                     c.set(recon.r[j], r + dx[dim + 1:])
 
@@ -117,6 +114,7 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
                     R = Radon(recon[:n])
                     F[jj] = fidelity(R, data)
                     E[jj] = F[jj] + reg(recon[:n])
+
                     if E[jj] > E[jj - 1]:
                         c.set(recon.I[j:j + 1], I)
                         c.set(recon.x[j], x)
@@ -145,37 +143,23 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
 #             print('Rad: ', recon.r)
 #             print('Amplitude: ', recon.I)
 
-            plotter(recon[:n], R, E, F, jj)
-            try:
-                plt.pause(.1)
-                if RECORD is not None:
-                    writer.grab_frame()
-                    print(n / nAtoms, _ / max_iter[0], E[jj - 1])
-            except NameError:
-                exit()
+            plot(recon, R, E, F, n, _, jj)
         n += 1
 
-    print('Reconstruction Finished', jj, F[:jj].min())
-    if RECORD is not None:
-        writer.finish()
-    plt.show(block=True)
+    plot(recon, R, E, F, n, _, jj, True)
     return recon, E[:jj], F[:jj]
 
 
 def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
-                     guess=None, gt=None, RECORD=None, tol=1e-4, min_iter=1):
-    if RECORD is None:
-        c, E, F, nAtoms, max_iter, plotter, plt = _startup(
-            recon, data, max_iter, view, guess, gt, RECORD, 3)
-    else:
-        c, E, F, nAtoms, max_iter, plotter, plt, writer = _startup(
-            recon, data, max_iter, view, guess, gt, RECORD, 3)
+                     guess=None, tol=1e-4, min_iter=1, myderivs=__derivs, **kwargs):
+    c, E, F, nAtoms, max_iter, plot = _startup(
+        recon, data, max_iter, view, guess, 3, **kwargs)
     eps = 1e-4
 
     # Stepsizes
     h = [[1] * nAtoms for _ in range(3)]
 
-    _, iso, derivs = __derivs(recon)
+    _, iso, derivs = myderivs(recon)
     if guess is None:
         R = Radon(recon)
         F[0] = fidelity(R, data)
@@ -287,18 +271,8 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
 #             print('Rad: ', recon.r)
 #             print('Amplitude: ', recon.I)
 
-            plotter(recon[:n], R, E, F, jj)
-            try:
-                plt.pause(.1)
-                if RECORD is not None:
-                    writer.grab_frame()
-                    print(n / nAtoms, _ / max_iter[0], E[jj - 1])
-            except NameError:
-                exit()
+            plot(recon, R, E, F, n, _, jj)
         n += 1
 
-    print('Reconstruction Finished', jj, F[:jj].min())
-    if RECORD is not None:
-        writer.finish()
-    plt.show(block=True)
+    plot(recon, R, E, F, n, _, jj, True)
     return recon, E[:jj], F[:jj]

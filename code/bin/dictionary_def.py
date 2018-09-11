@@ -67,7 +67,7 @@ class Element:
     # This is necessary to prevent numpy calling __array_wrap__
     __array_priority__ = 100
 
-    def __init__(self, space, *other):
+    def __init__(self, space):
         self.space = space
         self.array = None
 
@@ -182,11 +182,12 @@ class AtomSpace(Space):
 
 class AtomElement(Element):
     def __init__(self, space, x, r, I):
+        Element.__init__(self, space)
+
         c = context()
         # This will copy to host even if it should stay on device
         x, r, I = c.asarray(x).copy(), c.asarray(r).copy(), c.asarray(I).copy()
 
-        self.space = space
         self.x = x.reshape(-1, space.dim)
 
         if r.size == 1:
@@ -343,7 +344,7 @@ class VolSpace(Space):
 
 class VolElement(Element):
     def __init__(self, space, u):
-        self.space = space
+        Element.__init__(self, space)
         if isscalar(u) or (u.size == 1):
             u = u * ones(space.shape)
         self.array = context().cast(u)
@@ -352,7 +353,7 @@ class VolElement(Element):
         self.shape = self.array.shape
 
     def plot(self, ax, *args, Slice=None, Sum=-1, T=True, **kwargs):
-        arr = self.asarray()
+        arr = self.asarray().real
         if Slice is not None:
             arr = squeeze(arr[Slice])
         if arr.ndim == 2:
@@ -432,19 +433,19 @@ class ProjSpace(Space):
 class ProjElement(Element):
 
     def __init__(self, space, u):
-        self.space = space
+        Element.__init__(self, space)
         if isscalar(u) or (u.size == 1):
             u = u * ones(space.shape)
         self.array = context().cast(u)
         if not tuple(self.array.shape) == tuple(self.space.shape):
-            raise ValueError
+            raise ValueError('Shape of array does not match shape of space')
         self.shape = self.array.shape
 
     def copy(self):
         return ProjElement(self.space, self.array)
 
     def plot(self, ax, origin='lower', aspect='auto', Slice=None, *args, **kwargs):
-        arr = self.asarray()
+        arr = self.asarray().real
         if Slice is not None:
             arr = squeeze(arr[Slice])
         if arr.ndim == 2:

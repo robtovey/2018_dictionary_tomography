@@ -61,6 +61,8 @@ def GaussRadon_GPU(I, x, r, t, w, p0, p1, R):
 @cuda.jit("void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])", cache=True)
 def __GaussRadon_GPU(s0, x, r, t, w, p0, p1, R):
     jj, k0, k1 = cuda.grid(3)
+    if jj >= t.shape[0] or k0 >= p0.shape[0] or k1 >= p1.shape[0]:
+        return
     tmp = 0
     for ii in range(x.shape[0]):
         rT0 = r[ii, 0] * t[jj, 0] + r[ii, 3] * t[jj, 1]

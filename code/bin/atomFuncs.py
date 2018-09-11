@@ -173,7 +173,6 @@ basis so it is 1 codim and can be factored out of the projection.
 class GaussVolume(Dictionary):
     def __init__(self, ASpace, VSpace, device='cpu'):
         Dictionary.__init__(self, ASpace, VSpace, isLinear=True)
-        self.dtype = 'float64'
         self.__device = device.lower()
         if ASpace.isotropic:
             if self.ElementSpace.dim == 2:
@@ -195,7 +194,7 @@ class GaussVolume(Dictionary):
         u = self.ProjectionSpace.zero()
         self.__proj(atoms.I, atoms.x, atoms.r,
                     *self.ProjectionSpace.grid,
-                    u.array)
+                    u.asarray())
         return u
 
 

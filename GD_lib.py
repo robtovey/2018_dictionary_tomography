@@ -3,22 +3,19 @@ Created on 21 May 2018
 
 @author: Rob Tovey
 '''
-from numpy import prod, zeros, sqrt, arange, random, log10, insert
+from numpy import prod, zeros, sqrt, arange, random, maximum
 from code.bin.manager import context
+from skimage import measure
 
 
 def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
-               guess=None, gt=None, RECORD=None, tol=1e-4, min_iter=1):
-    if RECORD is None:
-        c, E, F, nAtoms, max_iter, plotter, plt = _startup(
-            recon, data, max_iter, view, guess, gt, RECORD, 1)
-    else:
-        c, E, F, nAtoms, max_iter, plotter, plt, writer = _startup(
-            recon, data, max_iter, view, guess, gt, RECORD, 1)
+               guess=None, tol=1e-4, min_iter=1, **kwargs):
+    c, E, F, nAtoms, max_iter, plot = _startup(
+        recon, data, max_iter, view, guess, 1, **kwargs)
     eps = 1e-8
 
     # Stepsizes
-    h = [1] * nAtoms
+    h = [1e-2] * nAtoms
     dim = 'Ixr'
 
     if guess is None:
@@ -55,9 +52,13 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
                         for d in dim]
                     T = [c.asarray(getattr(recon, d)[j]) for d in dim]
                     old = [t.copy() for t in T]
-                    for t in range(3):
-                        c.set(getattr(recon, dim[t])[j:j + 1],
-                              T[t] - h[j] * grad[t])
+
+                    c.set(getattr(recon, dim[0])[j:j + 1],
+                          maximum(0, T[0] - h[j] * grad[0]))
+                    c.set(getattr(recon, dim[1])[j:j + 1],
+                          T[1] - h[j] * grad[1])
+                    c.set(getattr(recon, dim[2])[j:j + 1],
+                          T[2] - h[j] * grad[2])
 
                     R = Radon(recon[:n])
                     F[jj] = fidelity(R, data)
@@ -81,25 +82,15 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
             if BREAK[0] and _ > min_iter:
                 break
 
-            plotter(recon[:n], R, E, F, jj)
-            try:
-                plt.pause(.1)
-                if RECORD is not None:
-                    writer.grab_frame()
-                    print(n / nAtoms, _ / max_iter[0], E[jj - 1])
-            except NameError:
-                exit()
+            plot(recon, R, E, F, n, _,  jj)
         n += 1
 
-    print('Reconstruction Finished', jj, F[:jj].min())
-    if RECORD is not None:
-        writer.finish()
-    plt.show(block=True)
+    plot(recon, R, E, F, n, _,  jj, True)
     return recon, E[:jj], F[:jj]
 
 
 def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
-                     dim='xrI', guess=None, gt=None, RECORD=None, tol=1e-4, min_iter=1):
+                     dim='xrI', guess=None, tol=1e-4, min_iter=1, **kwargs):
     dim = dim.lower()
     tmp = ''
     if 'x' in dim:
@@ -110,16 +101,12 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
         tmp += 'I'
     dim = tmp
 
-    if RECORD is None:
-        c, E, F, nAtoms, max_iter, plotter, plt = _startup(
-            recon, data, max_iter, view, guess, gt, RECORD, len(dim))
-    else:
-        c, E, F, nAtoms, max_iter, plotter, plt, writer = _startup(
-            recon, data, max_iter, view, guess, gt, RECORD, len(dim))
+    c, E, F, nAtoms, max_iter, plot = _startup(
+        recon, data, max_iter, view, guess, len(dim), **kwargs)
     eps = 1e-8
 
     # Stepsizes
-    h = [[1] * nAtoms for _ in dim]
+    h = [[1e-2] * nAtoms for _ in dim]
 
     if guess is None:
         R = Radon(recon)
@@ -185,20 +172,10 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
             if BREAK[0] and _ > min_iter:
                 break
 
-            plotter(recon[:n], R, E, F, jj)
-            try:
-                plt.pause(.1)
-                if RECORD is not None:
-                    writer.grab_frame()
-                    print(n / nAtoms, _ / max_iter[0], E[jj - 1])
-            except NameError:
-                exit()
+            plot(recon, R, E, F, n, _,  jj)
         n += 1
 
-    print('Reconstruction Finished', jj, F[:jj].min())
-    if RECORD is not None:
-        writer.finish()
-    plt.show(block=True)
+    plot(recon, R, E, F, n, _, jj, True)
     return recon, E[:jj], F[:jj]
 
 
@@ -206,16 +183,17 @@ def norm(x):
     return sqrt((x * x).sum())
 
 
-def _startup(recon, data, max_iter, view, guess, gt, RECORD, L):
+def _startup(recon, data, max_iter, view, guess,  L, gt=None, RECORD=None, thresh=None, angles=None):
     '''
     recon is element of atom space
     L is number of energy recordings per iter
 
     '''
+    from time import gmtime, strftime
+    print('Start time is: ', strftime("%H:%M", gmtime()))
     if RECORD is not None:
-        import matplotlib
-        matplotlib.use('Agg')
-    from matplotlib import pyplot as plt, animation as mv
+        __makeVid(stage=0)
+    from matplotlib import pyplot as plt
 
     c = context()
 
@@ -247,21 +225,63 @@ def _startup(recon, data, max_iter, view, guess, gt, RECORD, L):
                 n = max_iter[1]
                 return _plot2DwithGT(ax, view(recon), gt, R, data, E[::n], F[::n], jj // (n * L))
     else:
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
         fig, ax = plt.subplots(2, 4, figsize=(20, 10))
+        ax[0, 0].remove()
+        ax[0, 0] = fig.add_subplot(241, projection='3d')
+        ax[0, 0].set_axis_off()
+        ax[1, 0].remove()
+        ax[1, 0] = fig.add_subplot(245, projection='3d')
+        ax[1, 0].set_axis_off()
         if gt is None:
-            def plotter(recon, R, E, F, jj):
-                n = max_iter[1]
-                return _plot3D(ax, view(recon), R, data, E[::n], F[::n], jj // (n * L), len(recon))
-        else:
-            def plotter(recon, R, E, F, jj):
-                n = max_iter[1]
-                return _plot3DwithGT(ax, view(recon), gt, R, data, E[::n], F[::n], jj // (n * L), len(recon))
-    if RECORD is not None:
-        writer = mv.writers['ffmpeg'](fps=5, metadata={'title': RECORD})
-        writer.setup(fig, RECORD + '.mp4', dpi=100)
+            if thresh is None:
+                thresh = data.asarray().max() / 100
+            if angles is None:
+                angles = ((20, 45), (20, 135))
 
-        return c, E, F, nAtoms, max_iter, plotter, plt, writer
-    return c, E, F, nAtoms, max_iter, plotter, plt
+            def plotter(recon, R, E, F, jj):
+                n = max_iter[1]
+                return _plot3D(ax, view(recon), R, data, E[::n], F[::n], jj // (n * L), len(recon), thresh, angles)
+        else:
+            ax[0, 1].remove()
+            ax[0, 1] = fig.add_subplot(242, projection='3d')
+            ax[0, 1].set_axis_off()
+            ax[1, 1].remove()
+            ax[1, 1] = fig.add_subplot(246, projection='3d')
+            ax[1, 1].set_axis_off()
+            if thresh is None:
+                thresh = gt.asarray().max() / 10
+            if angles is None:
+                angles = ((0, 0), (0, 90))
+
+            def plotter(recon, R, E, F, jj):
+                n = max_iter[1]
+                return _plot3DwithGT(ax, view(recon), gt, R, data, E[::n], F[::n], jj // (n * L), len(recon), thresh, angles)
+    if RECORD is not None:
+        writer = __makeVid(fig, RECORD, stage=1)
+
+        def do_plot(recon, r, e, f, n, i, jj, end=False):
+            if end:
+                print('Reconstruction Finished', jj, F[:jj].min())
+                __makeVid(writer, plt, stage=3)
+            else:
+                plotter(recon[:n], r, e, f, jj)
+                __makeVid(writer, plt, stage=2)
+                print('%.2f, %.2f, % 5.3f' % (n / nAtoms,
+                                              i / max_iter[0], E[jj - 1]))
+    else:
+        def do_plot(recon, r, e, f, n, i, jj, end=False):
+            if end:
+                print('Reconstruction Finished', jj, F[:jj].min())
+                plt.show(block=True)
+            else:
+                print('%.2f, %.2f, % 5.3f' % (n / nAtoms,
+                                              i / max_iter[0], E[jj - 1]))
+                plt.pause(.1)
+                plotter(recon[:n], r, e, f, jj)
+                plt.show(block=False)
+
+    return c, E, F, nAtoms, max_iter, do_plot
 
 
 def _plot2D(ax, recon, R, data, E, F, jj):
@@ -276,10 +296,15 @@ def _plot2D(ax, recon, R, data, E, F, jj):
     ax[1, 0].set_title('Reconstructed Sinogram')
     data.plot(ax[1, 1], aspect='auto')
     ax[1, 1].set_title('Data Sinogram')
-    ax[0, 2].plot(log10(F[:jj]))
-    ax[0, 2].set_title('log10(Fidelity)')
-    ax[1, 2].plot(log10(E[:jj]))
-    ax[1, 2].set_title('log10(Energy)')
+
+    ax[0, 2].plot(F[:jj])
+    ax[0, 2].set_yscale('log')
+    ax[0, 2].tick_params(axis='y', which='minor', bottom=True)
+    ax[0, 2].set_title('Fidelity')
+    ax[1, 2].plot(E[:jj])
+    ax[1, 2].set_yscale('linear')
+    ax[1, 2].set_ylim(E[jj - 1], 1.5 * E[jj // 4] - E[jj - 1] / 3)
+    ax[1, 2].set_title('Energy')
 
 
 def _plot2DwithGT(ax, recon, gt, R, data, E, F, jj):
@@ -298,70 +323,156 @@ def _plot2DwithGT(ax, recon, gt, R, data, E, F, jj):
 #     from numpy import minimum
 #     ax[1, 1].imshow(minimum(0, (R - data).array), aspect='auto')
     ax[1, 1].set_title('Sinogram Error')
-    ax[0, 2].plot(log10(F[:jj]))
-    ax[0, 2].set_title('log10(Fidelity)')
-    ax[1, 2].plot(log10(E[:jj]))
-    ax[1, 2].set_title('log10(Energy)')
+
+    ax[0, 2].plot(F[:jj])
+    ax[0, 2].set_yscale('log')
+    ax[0, 2].tick_params(axis='y', which='minor', bottom=True)
+    ax[0, 2].set_title('Fidelity')
+    ax[1, 2].plot(E[:jj])
+    ax[1, 2].set_yscale('linear')
+    ax[1, 2].set_ylim(E[jj - 1], 1.5 * E[jj // 4] - E[jj - 1] / 3)
+    ax[1, 2].set_title('Energy')
 
 
-def _plot3D(ax, recon, R, data, E, F, jj, nAtoms):
+def _plot3D(ax, recon, R, data, E, F, jj, nAtoms, thresh, angles):
     for a in ax.reshape(-1):
         a.clear()
 
-    recon.plot(ax[0, 0], Slice=[slice(None), slice(
-        None), round(recon.shape[2] / 2)])
-    ax[0, 0].set_title('Recon, slice from top')
-    recon.plot(ax[1, 0], Slice=[slice(None), round(
-        recon.shape[1] / 2), slice(None)])
-    ax[1, 0].set_title('Recon, slice from front')
+    try:
+        tmp = recon.asarray()
+        m = _get3DvolPlot(ax[0, 0], tmp, angle=angles[0], thresh=thresh)
+        m = _get3DvolPlot(ax[1, 0], tmp, angle=angles[1], m=m)
+    except ValueError:
+        pass
+    ax[0, 0].set_title('Recon, view from orientation: ' + str(angles[0]))
+    ax[1, 0].set_title('Recon, view from orientation: ' + str(angles[1]))
+
+#     recon.plot(ax[0, 0], Slice=[slice(None), slice(
+#         None), round(recon.shape[2] / 2)])
+#     ax[0, 0].set_title('Recon, slice from top')
+#     recon.plot(ax[1, 0], Slice=[slice(None), round(
+#         recon.shape[1] / 2), slice(None)])
+#     ax[1, 0].set_title('Recon, slice from front')
 
     Slice = int(R.shape[0] / 2)
-    clim = [0, data.array[Slice].max()]
+    clim = [0, data.array[Slice].real.max()]
     data.plot(ax[0, 1], Slice=Slice, clim=clim)
     ax[0, 1].set_title('Middle Data Projection')
     R.plot(ax[1, 1], Slice=Slice, clim=clim)
     ax[1, 1].set_title('Middle Recon Projection')
 
     Slice = (jj // (3 * nAtoms)) % R.shape[0]
-    clim = [0, data.array[Slice].max()]
+    clim = [0, data.array[Slice].real.max()]
     data.plot(ax[0, 2], Slice=Slice, clim=clim)
     ax[0, 2].set_title('Data Projection')
     R.plot(ax[1, 2], Slice=Slice, clim=clim)
     ax[1, 2].set_title('Recon Projection')
 
-    ax[0, 3].plot(log10(F[:jj]))
-    ax[0, 3].set_title('log10(Fidelity)')
-    ax[1, 3].plot(log10(E[:jj]))
-    ax[1, 3].set_title('log10(Energy)')
+    ax[0, 3].plot(F[:jj])
+    ax[0, 3].set_yscale('log')
+    ax[0, 3].set_title('Fidelity')
+    ax[1, 3].plot(E[:jj])
+    ax[1, 3].set_yscale('linear')
+    ax[1, 3].set_ylim(E[jj - 1], 1.5 * E[jj // 4] - E[jj - 1] / 3)
+    ax[1, 3].set_title('Energy')
 
 
-def _plot3DwithGT(ax, recon, gt, R, data, E, F, jj, nAtoms):
+def _plot3DwithGT(ax, recon, gt, R, data, E, F, jj, nAtoms, thresh, angles):
     for a in ax.reshape(-1):
         a.clear()
 
-    n = (round(gt.shape[2] / 2), round(gt.shape[1] / 2))
-    cax = (gt.array[:, :, n[0]].max(), gt.array[:, n[1]].max())
-    gt.plot(ax[0, 0], Slice=[slice(None), slice(
-        None), n[0]], vmin=0, vmax=cax[0])
-    ax[0, 0].set_title('GT, slice from top')
-    gt.plot(ax[0, 1], Slice=[slice(None), n[1],
-                             slice(None)], vmin=0, vmax=cax[1])
-    ax[0, 1].set_title('GT, slice from front')
-    recon.plot(ax[1, 0], Slice=[slice(None), slice(
-        None), n[0]], vmin=0, vmax=cax[0])
-    ax[1, 0].set_title('Recon, slice from top')
-    recon.plot(ax[1, 1], Slice=[slice(None), n[1],
-                                slice(None)], vmin=0, vmax=cax[1])
-    ax[1, 1].set_title('Recon, slice from front')
+    tmp = gt.asarray()
+    m = _get3DvolPlot(ax[0, 0], tmp, angle=angles[0], thresh=thresh)
+    ax[0, 0].set_title('GT, view from orientation: ' + str(angles[0]))
+    m = _get3DvolPlot(ax[0, 1], tmp, angle=angles[1], m=m)
+    ax[0, 1].set_title('GT, view from orientation: ' + str(angles[1]))
+
+    try:
+        tmp = recon.asarray()
+        m = _get3DvolPlot(ax[1, 0], tmp, angle=angles[0], thresh=thresh)
+        m = _get3DvolPlot(ax[1, 1], tmp, angle=angles[1], m=m)
+    except ValueError:
+        pass
+    ax[1, 0].set_title('Recon, view from orientation: ' + str(angles[0]))
+    ax[1, 1].set_title('Recon, view from orientation: ' + str(angles[1]))
+
+#     n = (round(gt.shape[2] / 2), round(gt.shape[1] / 2))
+#     cax = (gt.array[:, :, n[0]].real.max(), gt.array[:, n[1]].real.max())
+#     gt.plot(ax[0, 0], Slice=[slice(None), slice(
+#         None), n[0]], vmin=0, vmax=cax[0])
+#     ax[0, 0].set_title('GT, slice from top')
+#     gt.plot(ax[0, 1], Slice=[slice(None), n[1],
+#                              slice(None)], vmin=0, vmax=cax[1])
+#     ax[0, 1].set_title('GT, slice from front')
+#     recon.plot(ax[1, 0], Slice=[slice(None), slice(
+#         None), n[0]], vmin=0, vmax=cax[0])
+#     ax[1, 0].set_title('Recon, slice from top')
+#     recon.plot(ax[1, 1], Slice=[slice(None), n[1],
+#                                 slice(None)], vmin=0, vmax=cax[1])
+#     ax[1, 1].set_title('Recon, slice from front')
 
     Slice = (jj // (3 * nAtoms)) % R.shape[0]
-    clim = [0, data.array[Slice].max()]
+    clim = [0, data.array[Slice].real.max()]
     data.plot(ax[0, 2], Slice=Slice, clim=clim)
     ax[0, 2].set_title('Data Projection')
     R.plot(ax[1, 2], Slice=Slice, clim=clim)
     ax[1, 2].set_title('Recon Projection')
 
-    ax[0, 3].plot(log10(F[:jj]))
-    ax[0, 3].set_title('log10(Fidelity)')
-    ax[1, 3].plot(log10(E[:jj]))
-    ax[1, 3].set_title('log10(Energy)')
+    ax[0, 3].plot(F[:jj])
+    ax[0, 3].set_yscale('log')
+    ax[0, 3].set_title('Fidelity')
+    ax[1, 3].plot(E[:jj])
+    ax[1, 3].set_yscale('linear')
+    ax[1, 3].set_ylim(E[jj - 1], 1.5 * E[jj // 4] - E[jj - 1] / 3)
+    ax[1, 3].set_title('Energy')
+
+
+def _get3DvolPlot(ax, img, angle=(45, 0), thresh=None, m=None):
+    if m is None:
+        v, f, _, _ = measure.marching_cubes(img, thresh, step_size=0 * int(
+            img.shape[0] / 50) + 1, allow_degenerate=False)
+        m = (v[:, 0], v[:, 1], f, v[:, 2])
+
+    if ax is None:
+        from matplotlib import pyplot
+        from mpl_toolkits.mplot3d.art3d import Poly3DCollection
+        ax = pyplot.gcf().add_subplot(111, projection='3d')
+
+    tmp = ax.plot_trisurf(*m, alpha=1)
+    tmp.set_edgecolor(tmp._facecolors)
+    ax.set_xlim(0, img.shape[0])
+    ax.set_ylim(0, img.shape[1])
+    ax.set_zlim(0, img.shape[2])
+    ax.set_xticks([])
+    ax.set_yticks([])
+    ax.set_zticks([])
+    ax.view_init(*angle)
+
+    return m
+
+
+def __makeVid(*args, stage=0, fps=5):
+    '''
+    stage 0: args=[], no return value
+        sets graphics library
+    stage 1: args=[figure, title], returns writer
+        initiates file/writer
+    stage 2: args=[writer, pyplot]
+        records new frame
+    stage 3: args=[writer, pyplot]
+        saves video
+    '''
+    if stage == 0:
+        import matplotlib
+        matplotlib.use('Agg')
+    elif stage == 1:
+        from matplotlib import animation as mv
+        writer = mv.writers['ffmpeg'](fps=5, metadata={'title': args[1]})
+        writer.setup(args[0], args[1] + '.mp4', dpi=100)
+        return writer
+    elif stage == 2:
+        args[1].pause(.1)
+        args[0].grab_frame()
+    elif stage == 3:
+        args[0].finish()
+        args[1].show(block=True)

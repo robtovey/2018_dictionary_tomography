@@ -14,7 +14,7 @@ def derivs_iso(atom, Rad, C):
     w0 = S.ortho[0]
     p0, p1 = S.detector
 
-    block = 1  # min(w0.shape[0], 1000)
+    block = min(w0.shape[0], 1000)
     sz = [w0.shape[0], p0.shape[0], p1.shape[0],
           (w0.shape[0] * p0.shape[0] * p1.shape[0]) // THREADS]
     if sz[3] * THREADS < sz[0] * sz[1] * sz[2]:
@@ -199,7 +199,7 @@ def __derivs_iso(I, x, r, w0, w1, p0, p1, C, f, Df, DDf, sz):
             i += 1
 
 
-@cuda.jit("void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:],f4[:],f4[:],f4[:,:],i4[:])", cache=True)
+@cuda.jit("void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:],f4[:],f4[:,:],f4[:,:,:],i4[:])", cache=True)
 def __derivs_iso_2p5D(I, x, r, w0, p0, p1, C, f, Df, DDf, sz):
     '''
     Calculate 0th, 1st and 2nd derivatives of 
@@ -216,7 +216,8 @@ def __derivs_iso_2p5D(I, x, r, w0, p0, p1, C, f, Df, DDf, sz):
     ddg = cuda.local.array((5, 5), f4)
     Y = cuda.local.array((3,), f4)
 
-    cc = cuda.threadIdx.x
+    block, thread = cuda.blockIdx.x, cuda.threadIdx.x
+    cc = cuda.grid(1)
 
     F[0] = 0
     for i in range(5):
@@ -246,30 +247,30 @@ def __derivs_iso_2p5D(I, x, r, w0, p0, p1, C, f, Df, DDf, sz):
         for i1 in range(i0 + 1, DDF.shape[0]):
             DDF[i1, i0] = DDF[i0, i1]
 
-    buf[cc, 0] = F[0]
+    buf[thread, 0] = F[0]
     i = 1
     for i0 in range(5):
-        buf[cc, i] = DF[i0]
+        buf[thread, i] = DF[i0]
         i += 1
     for i0 in range(5):
         for i1 in range(i0 + 1):
-            buf[cc, i] = DDF[i0, i1]
+            buf[thread, i] = DDF[i0, i1]
             i += 1
     cuda.syncthreads()
 
     __GPU_reduce_n(buf, 21)
-    if cc == 0:
-        f[0] = buf[cc, 0]
+    if thread == 0:
+        f[block] = buf[0, 0]
         i = 1
         for i0 in range(5):
-            Df[i0] = buf[cc, i]
+            Df[i0, block] = buf[0, i]
             i += 1
         for i0 in range(5):
             for i1 in range(i0):
-                DDf[i0, i1] = buf[cc, i]
-                DDf[i1, i0] = buf[cc, i]
+                DDf[i0, i1, block] = buf[0, i]
+                DDf[i1, i0, block] = buf[0, i]
                 i += 1
-            DDf[i0, i0] = buf[cc, i]
+            DDf[i0, i0, block] = buf[0, i]
             i += 1
 
 
@@ -536,7 +537,7 @@ def __derivs_aniso(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz):
             i += 1
 
 
-@cuda.jit("void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:],f4[:],f4[:],f4[:,:],i4[:])", cache=True)
+@cuda.jit("void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:],f4[:],f4[:,:],f4[:,:,:],i4[:])", cache=True)
 def __derivs_aniso_2p5D(I, x, r, t, w0, p0, p1, C, f, Df, DDf, sz):
     '''
     Calculate 0th, 1st and 2nd derivatives of 
@@ -553,8 +554,10 @@ def __derivs_aniso_2p5D(I, x, r, t, w0, p0, p1, C, f, Df, DDf, sz):
     ddg = cuda.local.array((10, 10), f4)
     rr = cuda.local.array((3, 3), f4)
     Y = cuda.local.array((3,), f4)
+    tt = cuda.local.array((3,), f4)
 
-    cc = cuda.threadIdx.x
+    block, thread = cuda.blockIdx.x, cuda.threadIdx.x
+    cc = cuda.grid(1)
 
     F[0] = 0
     for i in range(10):
@@ -567,6 +570,7 @@ def __derivs_aniso_2p5D(I, x, r, t, w0, p0, p1, C, f, Df, DDf, sz):
     rr[0, 1] = r[0, 3]
     rr[1, 2] = r[0, 4]
     rr[0, 2] = r[0, 5]
+    tt[2] = 0
 
     for indx in range(sz[3] * cc, sz[3] * (cc + 1)):
         T = indx // (sz[1] * sz[2])
@@ -576,7 +580,8 @@ def __derivs_aniso_2p5D(I, x, r, t, w0, p0, p1, C, f, Df, DDf, sz):
             Y[0] = p0[i0] * w0[T, 0] - x[0, 0]
             Y[1] = p0[i0] * w0[T, 1] - x[0, 1]
             Y[2] = p1[i1] - x[0, 2]
-            __derivs_aniso_aux(I[0], Y, rr, t[T], g, dg, ddg)
+            tt[0], tt[1] = t[T, 0], t[T, 1]
+            __derivs_aniso_aux(I[0], Y, rr, tt, g, dg, ddg)
 
             g[0] = g[0] - C[T, i0, i1]
             F[0] += g[0] * g[0]
@@ -590,30 +595,30 @@ def __derivs_aniso_2p5D(I, x, r, t, w0, p0, p1, C, f, Df, DDf, sz):
         for i1 in range(i0 + 1, DDF.shape[0]):
             DDF[i1, i0] = DDF[i0, i1]
 
-    buf[cc, 0] = F[0]
+    buf[thread, 0] = F[0]
     i = 1
     for i0 in range(10):
-        buf[cc, i] = DF[i0]
+        buf[thread, i] = DF[i0]
         i += 1
     for i0 in range(10):
         for i1 in range(i0 + 1):
-            buf[cc, i] = DDF[i0, i1]
+            buf[thread, i] = DDF[i0, i1]
             i += 1
     cuda.syncthreads()
 
     __GPU_reduce_n(buf, 66)
-    if cc == 0:
-        f[0] = buf[cc, 0]
+    if thread == 0:
+        f[block] = buf[0, 0]
         i = 1
         for i0 in range(10):
-            Df[i0] = buf[cc, i]
+            Df[i0, block] = buf[0, i]
             i += 1
         for i0 in range(10):
             for i1 in range(i0):
-                DDf[i0, i1] = buf[cc, i]
-                DDf[i1, i0] = buf[cc, i]
+                DDf[i0, i1, block] = buf[0, i]
+                DDf[i1, i0, block] = buf[0, i]
                 i += 1
-            DDf[i0, i0] = buf[cc, i]
+            DDf[i0, i0, block] = buf[0, i]
             i += 1
 
 
@@ -711,10 +716,13 @@ if __name__ == '__main__':
 
     g, dg, ddg = empty(2, dtype='f4'), empty(
         (10, 2), dtype='f4'), empty((10, 10, 2), dtype='f4')
-    __derivs_aniso[2, 1](I, x, r, T, y, array([[0, 0, 0]], dtype='f4'),
-                         array(1, dtype='f4'), array(
-                             1, dtype='f4'), C, g, dg, ddg,
-                         array([1, 1, 1, 1], dtype='i4'))
+#     __derivs_aniso[2, 1](I, x, r, T, y, array([[0, 0, 0]], dtype='f4'),
+#                          array(1, dtype='f4'), array(
+#                              1, dtype='f4'), C, g, dg, ddg,
+#                          array([1, 1, 1, 1], dtype='i4'))
+    __derivs_aniso_2p5D[2, 1](I, x, r, T, y[:, :2], array(1, dtype='f4'),
+                              array(y[0, 2], dtype='f4'), C, g, dg, ddg,
+                              array([1, 1, 1, 1], dtype='i4'))
     g, dg, ddg = g.sum(-1), dg.sum(-1), ddg.sum(-1)
 
     print('Printouts for aniso test:')
@@ -754,9 +762,12 @@ if __name__ == '__main__':
 
     g, dg, ddg = empty(1, dtype='f4'), empty(
         (5, 1), dtype='f4'), empty((5, 5, 1), dtype='f4')
-    __derivs_iso[1, 1](I, x, r[:, :1], y, array([[0, 0, 0]], dtype='f4'),
-                       array(1, dtype='f4'), array(1, dtype='f4'),
-                       C, g, dg, ddg, array([1] * 4, dtype='i4'))
+#     __derivs_iso[1, 1](I, x, r[:, :1], y, array([[0, 0, 0]], dtype='f4'),
+#                        array(1, dtype='f4'), array(1, dtype='f4'),
+#                        C, g, dg, ddg, array([1] * 4, dtype='i4'))
+    __derivs_iso_2p5D[1, 1](I, x, r[:, :1], y[:, :2], array(1, dtype='f4'),
+                            array(y[0, 2], dtype='f4'), C, g, dg, ddg,
+                            array([1] * 4, dtype='i4'))
     g, dg, ddg = g.sum(-1), dg.sum(-1), ddg.sum(-1)
 
     print('Printouts for iso test:')

@@ -646,7 +646,12 @@ class l2_squared_loss(Fidelity):
         # d = (x - y)**2
         c = context()
         d = c.sub(x, y)
-        c.mul(d, d, d)
+        if str(x.dtype)[0] == 'f':
+            c.mul(d, d, d)
+        else:
+            # TODO: fix l2 norm for complex data
+            d = abs(d)
+            d *= d
 
         return c.sum(d) / 2
 

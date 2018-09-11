@@ -50,7 +50,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     gt_view = view(gt)
     R = Radon(recon)
 
-#     from atomFuncs import test_grad
+#     from code.bin.atomFuncs import test_grad
 #     test_grad(ASpace, Radon, [10**-(k + 1) for k in range(6)])
 #     exit()
 

@@ -57,6 +57,8 @@ def GaussRadon_GPU(I, x, r, t, w, p, R):
 @cuda.jit("void(f4[:,:],f4[:],f4[:],f4[:,:],f4[:],f4[:,:])", cache=True)
 def __GaussRadon_GPU(x, s1, s2, w, p, R):
     jj, kk = cuda.grid(2)
+    if jj >= w.shape[0] or kk >= p.shape[0]:
+        return
     tmp = 0
     for ii in range(x.shape[0]):
         inter = (p[kk] - x[ii, 0] * w[jj, 0] -

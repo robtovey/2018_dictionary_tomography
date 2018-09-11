@@ -104,34 +104,30 @@ class Joubert(Regulariser):
 
 
 class Mass(Regulariser):
-    def __init__(self, dim, m, k=2):
+    def __init__(self, dim, m, k=2, s=1):
         # Volume is I/det(r)
-        # reg = (I/det(r)-m)^{-k}
+        # reg = (I/det(r)-m)^{k}
         self.dim = dim
-        self.param = (m, k)
+        self.param = (m, k, s)
 
     def __call__(self, atoms):
-        # atoms.I, atoms.x, atoms.r
-        # reg(atoms) = (I/det(r)-m)^{-k}
+        # reg(atoms) = s*(I/det(r)-m)^{k}
         c = context()
         I, r = c.asarray(atoms.I), c.asarray(atoms.r)
 
-        if I.min() <= 0:
+        if I.min() < 0:
             return infty
         if atoms.space.isotropic:
             V = I * r**self.dim
         else:
             V = I / prod(r[:, :self.dim], axis=1)
         V = abs(V)
-        d = (V - self.param[0])**(-self.param[1])
+        d = (V - self.param[0])**(self.param[1])
 
-        if V.min() <= self.param[0]:
-            return infty
-
-        return d.sum()
+        return self.param[2] * d.sum()
 
     def grad(self, atoms, axis=None):
-        # reg(atoms) = (I/det(r)-m)^{-k} = (I*R-m)^{-k}
+        # reg(atoms) = s(I/det(r)-m)^k = s(I*R-m)^k
         c = context()
         I, x, r = c.asarray(atoms.I), c.asarray(atoms.x), c.asarray(atoms.r)
 
@@ -158,13 +154,13 @@ class Mass(Regulariser):
         else:
             d = concatenate((dI.reshape(-1), dx.reshape(-1), dr.reshape(-1)))
 
-        return -self.param[1] * d * (I * R - self.param[0])**(-self.param[1] - 1)
+        return (self.param[2] * self.param[1]) * d * (I * R - self.param[0])**(self.param[1] - 1)
 
     def hess(self, atoms):
-        # reg(atoms) = (I/det(r)-m)^{-k} = (I*R-m)^{-k}
-        # d_y = d(IR)_y*(-k(V-m)^{-k-1})
-        # dd_{yz} = dd(IR)_{yz}*(-k(V-m)^{-k-1}) +
-        #             d(IR)_y*d(IR)_z*(k(k+1)(V-m)^{-k-2})
+        # reg(atoms) = s(I/det(r)-m)^k = s(I*R-m)^k
+        # d_y = d(IR)_y*(k(V-m)^{k-1})
+        # dd_{yz} = dd(IR)_{yz}*(k(V-m)^{k-1}) +
+        #             d(IR)_y*d(IR)_z*(k(k-1)(V-m)^{k-2})
         c = context()
         I, r = c.asarray(atoms.I), c.asarray(atoms.r)
         D = self.dim
@@ -176,8 +172,8 @@ class Mass(Regulariser):
             R = 1 / prod(r[:, :D], axis=1)
             dd = zeros((int(1 + D + (D * (D + 1)) / 2),
                         int(1 + D + (D * (D + 1)) / 2)))
-        s = (-self.param[1] * (I * R - self.param[0])**(-self.param[1] - 1), self.param[1]
-             * (self.param[1] + 1) * (I * R - self.param[0])**(-self.param[1] - 2))
+        s = (self.param[1] * (I * R - self.param[0])**(self.param[1] - 1), self.param[1]
+             * (self.param[1] - 1) * (I * R - self.param[0])**(self.param[1] - 2))
 
         # dd_{II}
         dd[0, 0] = R * R * s[1]
@@ -209,40 +205,132 @@ class Mass(Regulariser):
                 dd[1 + D + i, 1 + D + i] = I * R / \
                     (r[:, i] * r[:, i]) * (2 * s[0] + I * R * s[1])
 
-        return dd
+        return self.param[2] * dd
+
+
+class Volume(Regulariser):
+    def __init__(self, dim, r0, k=2, s=1):
+        # reg = s*|det(r)-r0^dim|^k
+        self.dim = dim
+        self.__p = (abs(r0)**dim, k, s)
+
+    def __call__(self, atoms):
+        # reg = s*|det(r)-r0^dim|^k
+        c = context()
+        r = c.asarray(atoms.r)
+
+        if r[:, :self.dim].min() <= 0:
+            return infty
+        if atoms.space.isotropic:
+            d = r**-self.dim - self.__p[0]
+        else:
+            d = r[:, :self.dim].prod(1) - self.__p[0]
+
+        return self.__p[2] * (abs(d)**self.__p[1]).sum()
+
+    def grad(self, atoms, axis=None):
+        # reg = s*|det(r)-r0^dim|^k
+        # dr_i = sk*(det(r)-r0^dim)|det(r)-r0^dim|^{k-2}*prod(r_{-i})
+        c = context()
+        I, x, r = c.asarray(atoms.I), c.asarray(atoms.x), c.asarray(atoms.r)
+
+        dI = 0 * I
+        dx = 0 * x
+        if atoms.space.isotropic:
+            d = r**-self.dim - self.__p[0]
+            dr = d * abs(d)**(self.__p[1] - 2) * \
+                (-self.__p[2] * self.dim * r**(-self.dim - 1))
+        else:
+            R = r[:, :self.dim].prod(1, keepdims=True)
+            d = R - self.__p[0]
+            d = self.__p[2] * d * abs(d)**(self.__p[1] - 2)
+
+            dr = zeros(r.shape)
+            ind = (slice(None), slice(self.dim))
+            dr[ind] = d * R / r[ind]
+
+        if axis == 0 or axis == 'I':
+            d = dI
+        elif axis == 1 or axis == 'x':
+            d = dx
+        elif axis == 2 or axis == 'r':
+            d = dr
+        else:
+            d = concatenate((dI.reshape(-1), dx.reshape(-1), dr.reshape(-1)))
+
+        return d
+
+    def hess(self, atom):
+        # reg = s*|det(r)-r0^dim|^k
+        # dr_i = sk*sign(R)|R|^{k-1}*prod(r_{-i})
+        # drr_{ij} = sk*sign(R)[ (k-1)sign(R)|R|^{k-2}prod(r_{-i})prod(r_{-j})
+        #                        + |R|^{k-1}prod(r_{-ij})delta_{ij}]
+        #          = sk|R|^{k-2}[ (k-1)prod(r_{-i})prod(r_{-j})
+        #                        + R*prod(r_{-ij})delta_{ij}]
+        # |r^{-d}-r0|^k -> -dk|r^{-d}-r0|^{k-1}r^{-d-1}
+        #       -> dk|R|^{k-2}[d(k-1)r^{-2(d-1)} +(d+1)Rr^{-d-2}]
+        c = context()
+        r = c.asarray(atom.r)
+        D = self.dim
+
+        if atom.space.isotropic:
+            dd = zeros((D + 2, D + 2))
+        else:
+            dd = zeros((int(1 + D + (D * (D + 1)) / 2),
+                        int(1 + D + (D * (D + 1)) / 2)))
+
+        # dd_{II}
+        dd[0, 0] = 0
+        # dd_{xx}
+        dd[1:1 + D, 1:1 + D] = 0
+
+        if atom.space.isotropic:
+            # dd_{rr}
+            R = r**-self.dim - self.__p[0]
+            scale = self.__p[2] * self.dim * self.__p[1] * R**(self.__p[1] - 2)
+
+            dd[1 + D, 1 + D] = scale * (
+                self.dim * (self.__p[1] - 1) * r**(-2 * (self.dim - 1))
+                + (self.dim + 1) * R * r**(-self.dim - 2))
+        else:
+            # dd_{rr}
+            for i in range(D):
+                dd[1 + D + i, 1 + D + i] = 1 / (r[:, i] * r[:, i])
+
+        return self.s * dd
 
 
 class Radius(Regulariser):
     def __init__(self, dim, s):
-        # reg = s*log(I/det(r))
+        # reg = -s*log(det(r))
         self.dim = dim
         self.s = s
 
     def __call__(self, atoms):
-        # reg = s*log(I/det(r))
+        # reg = -s*log(det(r))
         c = context()
-        I, r = c.asarray(atoms.I), c.asarray(atoms.r)
+        r = c.asarray(atoms.r)
 
-        if I.min() <= 0 or r[:, :self.dim].min() <= 0:
+        if r[:, :self.dim].min() <= 0:
             return infty
         if atoms.space.isotropic:
-            d = -log(I) - self.dim * log(r)
+            d = self.dim * log(r)
         else:
-            d = -log(I) + log(r[:, :self.dim]).sum(1)
+            d = -log(r[:, :self.dim]).sum(1)
 
         return self.s * d.sum()
 
     def grad(self, atoms, axis=None):
-        # reg = s*log(I/det(r))
+        # reg = -s*log(det(r))
         c = context()
         I, x, r = c.asarray(atoms.I), c.asarray(atoms.x), c.asarray(atoms.r)
 
-        dI = -1 / I
+        dI = 0 * I
         dx = 0 * x
         if atoms.space.isotropic:
-            dr = -self.dim / r
+            dr = self.dim / r
         else:
-            dr = +1 / r
+            dr = -1 / r
             dr[:, self.dim:] = 0
 
         if axis == 0 or axis == 'I':
@@ -257,11 +345,11 @@ class Radius(Regulariser):
         return self.s * d
 
     def hess(self, atoms):
-        # reg(atoms) = s*log(I/det(r))
+        # reg(atoms) = -s*log(det(r))
         # d_y = \pm s/y
         # dd_{yz} = \mp s/y^2
         c = context()
-        I, r = c.asarray(atoms.I), c.asarray(atoms.r)
+        r = c.asarray(atoms.r)
         D = self.dim
 
         if atoms.space.isotropic:
@@ -271,16 +359,77 @@ class Radius(Regulariser):
                         int(1 + D + (D * (D + 1)) / 2)))
 
         # dd_{II}
-        dd[0, 0] = 1 / (I * I)
+        dd[0, 0] = 0
         # dd_{xx}
         dd[1:1 + D, 1:1 + D] = 0
 
         if atoms.space.isotropic:
             # dd_{rr}
-            dd[1 + D, 1 + D] = D / (r * r)
+            dd[1 + D, 1 + D] = -D / (r * r)
         else:
             # dd_{rr}
             for i in range(D):
-                dd[1 + D + i, 1 + D + i] = -1 / (r[:, i] * r[:, i])
+                dd[1 + D + i, 1 + D + i] = 1 / (r[:, i] * r[:, i])
 
         return self.s * dd
+
+
+class Iso(Regulariser):
+    def __init__(self, dim, s):
+        self.dim = dim
+        self.s = s
+
+    def __call__(self, atoms):
+        r = context().asarray(atoms.r)
+
+        if r.shape[0] == r.size:
+            return 0
+        else:
+            d = abs(r[:, self.dim:])
+            d = d * d
+            return self.s * d.sum() / 2
+
+    def grad(self, atoms, axis=None):
+        c = context()
+        I, x, r = c.asarray(atoms.I), c.asarray(atoms.x), c.asarray(atoms.r)
+
+        dI = 0 * I
+        dx = 0 * x
+        if atoms.space.isotropic:
+            dr = 0 * r
+        else:
+            dr = zeros(r.shape)
+            dr[:, self.dim:] = r[:, self.dim:]
+
+        if axis == 0 or axis == 'I':
+            d = dI
+        elif axis == 1 or axis == 'x':
+            d = dx
+        elif axis == 2 or axis == 'r':
+            d = dr
+        else:
+            d = concatenate((dI.reshape(-1), dx.reshape(-1), dr.reshape(-1)))
+
+        return self.s * d
+
+    def hess(self, atoms):
+        # reg(atoms) = s(I/det(r)-m)^k = s(I*R-m)^k
+        # d_y = d(IR)_y*(k(V-m)^{k-1})
+        # dd_{yz} = dd(IR)_{yz}*(k(V-m)^{k-1}) +
+        #             d(IR)_y*d(IR)_z*(k(k-1)(V-m)^{k-2})
+        c = context()
+        r = c.asarray(atoms.r)
+        D = self.dim
+
+        if atoms.space.isotropic:
+            dd = zeros((D + 2, D + 2))
+        else:
+            dd = zeros((int(1 + D + (D * (D + 1)) / 2),
+                        int(1 + D + (D * (D + 1)) / 2)))
+
+        if not atoms.space.isotropic:
+            # dd_{rr}
+            for i in range(D, r.shape[1]):
+                dd[1 + D + i, 1 + D + i] = self.s
+
+        return dd
