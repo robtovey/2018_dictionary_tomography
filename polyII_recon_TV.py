@@ -40,7 +40,7 @@ vol = list(gt.shape)
 Radon, _, fidelity, data, vol, PSpace, params = standardGaussTomo(
     gt=gt, dim=3, solver='odl', fidelity='l2_squared', reg=['TV', 3e-6],
     vol_box=([-v / sqrt(128) for v in vol], [v / sqrt(128) for v in vol]), vol_size=vol,
-    angle_range=[-60 * pi / 180, 60 * pi / 180], angle_num=61,
+    angle_range=[-60 * pi / 180, 60 * pi / 180], angle_num=61, noise=0.1,
     det_box=([-v / sqrt(128) for v in vol[1:]], [v / sqrt(128) for v in vol[1:]]), det_size=vol[1:]
 )
 
@@ -72,12 +72,12 @@ x = params[2].domain.zero()
 odl.solvers.pdhg(x, params[0], params[1], params[2], tau=tau, sigma=sigma, niter=niter,
                  callback=callback)
 
-# x.show(title='TV reconstruction', force_show=True)
+x.show(title='TV reconstruction', force_show=True)
 
 data *= scale
 x = x.asarray() * scale
 print('GT RMSE = %f, data RMSE = %f' %
-      ((abs((gt - x).asarray())**2).sum() / gt.size,
+      ((abs(gt - x)**2).sum() / gt.size,
        (abs((data - Radon(x)).asarray())**2).sum() / data.size))
 
-savemat(join('store', 'polyII_TV'), {'view': x})
+# savemat(join('store', 'polyII_TV'), {'view': x})

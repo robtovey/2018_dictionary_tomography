@@ -9,8 +9,8 @@ from numba import cuda
 # from pyculib import fft as cu_fft
 from numpy import empty, zeros, array, exp, log, maximum, arange
 from numpy.fft import fftshift, irfft2, rfft2
-from code.bin.dictionary_def import Element
-from code.bin.numba_cuda_aux import __GPU_reduce_2, __GPU_fill2,\
+from code.dictionary_def import Element
+from code.bin.numba_cuda_aux import __GPU_reduce_2, __GPU_fill2, \
     __GPU_mult2_Cconj, __GPU_mult2_C, THREADS, __GPU_fill2_C, __GPU_sum2_C2R
 from code.bin.manager import context
 ################
@@ -161,7 +161,7 @@ sup <d,x>- (eps/2)|d|^2 s.t. |grad(d)|<1
             tmp = 1 / (1 + eps * tau[1])
             for j0 in range(d.shape[0]):
                 for j1 in range(d.shape[1]):
-                    dP[j0, j1] = (d[j0, j1] + tau[1] *
+                    dP[j0, j1] = (d[j0, j1] + tau[1] * 
                                   (2 * grad_muP[j0, j1] - grad_mu[j0, j1] + x[j0, j1])) * tmp
                     IP_d_x += dP[j0, j1] * x[j0, j1]
 
@@ -178,12 +178,12 @@ sup <d,x>- (eps/2)|d|^2 s.t. |grad(d)|<1
             for j0 in range(d.shape[0]):
                 for j1 in range(d.shape[1]):
                     prim += ((muP[j0, j1, 0] - mu[j0, j1, 0] - tau[0]
-                              * (grad_dP[j0, j1, 0] - grad_d[j0, j1, 0]))**2
-                             + (muP[j0, j1, 1] - mu[j0, j1, 1] - tau[0]
-                                * (grad_dP[j0, j1, 1] - grad_d[j0, j1, 1]))**2)
+                              * (grad_dP[j0, j1, 0] - grad_d[j0, j1, 0])) ** 2
+                             +(muP[j0, j1, 1] - mu[j0, j1, 1] - tau[0]
+                                * (grad_dP[j0, j1, 1] - grad_d[j0, j1, 1])) ** 2)
                     dual += (dP[j0, j1] - d[j0, j1] - tau[1]
-                             * (grad_muP[j0, j1] - grad_mu[j0, j1]))**2
-            prim, dual = prim**.5, dual**.5
+                             * (grad_muP[j0, j1] - grad_mu[j0, j1])) ** 2
+            prim, dual = prim ** .5, dual ** .5
             prim /= tau[0]
             dual /= tau[1]
             if prim > Del * dual:
@@ -268,11 +268,11 @@ Note if A_{i,j} = |i-j| for [i,j] in p.shape then we have
                     for j1 in range(v.shape[1]):
                         tmp += K[abs(j0 - i0)] * K[abs(j1 - i1)] * v[j0, j1]
                 tmp = p[i0, i1] / tmp
-                diff += (u[i0, i1] - tmp)**2
+                diff += (u[i0, i1] - tmp) ** 2
                 mag += tmp * tmp
                 u[i0, i1] = tmp
 
-        if (diff / mag)**.5 < 1e-6:
+        if (diff / mag) ** .5 < 1e-6:
             print(_, diff, u.sum())
             break
 
@@ -281,8 +281,8 @@ Note if A_{i,j} = |i-j| for [i,j] in p.shape then we have
         for i1 in range(u.shape[1]):
             for j0 in range(v.shape[0]):
                 for j1 in range(v.shape[1]):
-                    tmp += (u[i0, i1] * v[j0, j1] *
-                            (abs(j0 - i0) + abs(j1 - i1)) *
+                    tmp += (u[i0, i1] * v[j0, j1] * 
+                            (abs(j0 - i0) + abs(j1 - i1)) * 
                             K[abs(j0 - i0)] * K[abs(j1 - i1)]
                             )
 
@@ -329,79 +329,6 @@ K = [0,1,...,n,n-1,...,1]+[0,1,...,n,n-1,...,1]^T
 
         u[i, :, :] = U
         d[i] = (irfft2(rfft2(M * exp(-M / g)) * rfft2(v)) * uu).sum()
-
-
-def sinkhorn_2D_fft_GPU(p, q, g, u, d):
-    stream = cuda.stream()
-    n = [p.shape[-2], p.shape[-1]]
-    x = [abs(fftshift(arange(-N, N))).reshape(-1, 1) for N in n]
-
-    grid = 1
-    sz = [n[0], n[1], (n[0] * n[1]) // THREADS]
-    if sz[2] * THREADS < sz[0] * sz[1]:
-        sz[2] += 1
-    sz = cuda.to_device(array(sz, dtype='int32'), stream=stream)
-    SZ = [2 * n[0], 2 * n[1], (4 * n[0] * n[1]) // THREADS]
-    if SZ[2] * THREADS < SZ[0] * SZ[1]:
-        SZ[2] += 1
-    SZ = cuda.to_device(array(SZ, dtype='int32'), stream=stream)
-
-    M = x[0] + x[1].T
-    K = cuda.to_device(
-        (exp(-M / g) / M.size).astype('complex64'), stream=stream)
-    KK = cuda.to_device(
-        (M * exp(-M / g) / M.size).astype('complex64'), stream=stream)
-
-    diff = cuda.device_array(2, dtype='float32', stream=stream)
-    tol = cuda.to_device(zeros(1, dtype='float32') + 1e-5, stream=stream)
-    Zero = cuda.to_device(zeros((1, 1), dtype='complex64'), stream=stream)
-    uu = cuda.device_array((2 * n[0], 2 * n[1]),
-                           dtype='complex64', stream=stream)
-    __GPU_fill2_C[grid, THREADS](uu, Zero, SZ)
-    v = cuda.device_array((2 * n[0], 2 * n[1]),
-                          dtype='complex64', stream=stream)
-    __GPU_fill2_C[grid, THREADS](v, Zero, SZ)
-    Ku = cuda.device_array((2 * n[0], 2 * n[1]),
-                           dtype='complex64', stream=stream)
-    stream.synchronize()
-#     cu_fft.FFTPlan(shape=Ku.shape, itype=1)
-    cu_fft.fft(K, K)
-    cu_fft.fft(KK, KK)
-
-    for i in range(p.shape[0]):
-        U = cuda.to_device(u[i, :, :].astype('complex64'), stream=stream)
-        stream.synchronize()
-        __GPU_fill2_C[grid, THREADS](uu, U, sz)
-        for _ in range(200):
-            cu_fft.fft(uu, Ku)
-            __GPU_mult2_Cconj[grid, THREADS](Ku, K, Ku, SZ)
-            # Ku *= K.conj()
-            cu_fft.ifft(Ku, Ku)
-            __sinkhorn_2D_GPU_aux0[grid, THREADS](
-                q[i], Ku, v, tol, diff, sz)
-            # v = q[i]/max(Ku.real,tol[0])
-            # diff = (|v-v_old|_1,|v|_1)
-
-            cu_fft.fft(v, Ku)
-            __GPU_mult2_C[grid, THREADS](Ku, K, Ku, SZ)
-            # Ku *= K
-            cu_fft.ifft_inplace(Ku)
-            __sinkhorn_2D_GPU_aux0[grid, THREADS](
-                p[i], Ku, uu, tol, diff, sz)
-            # uu = p[i]/max(Ku,tol[0])
-            # diff = (|uu-uu_old|_1,|uu|_1)
-
-            if diff[0] < 1e-4 * diff[1]:
-                break
-
-        cu_fft.fft(uu, Ku)
-        __GPU_mult2_C[grid, THREADS](Ku, KK, Ku, sz)
-        cu_fft.ifft_inplace(Ku)
-        __GPU_sum2_C2R(Ku, d[i:i + 1], sz)
-
-        U = uu[:n[0], :n[1]].copy_to_host(stream=stream)
-        stream.synchronize()
-        u[i, :, :] = U.real
 
 
 @cuda.jit('void(f4[:,:],c8[:,:],f4[:,:],f4[:],f4[:],i4[:])')
@@ -458,10 +385,10 @@ dP = argmin |z-Z|^2/2 - s<z,x> & Z =  d + s*(R(2*aP-a)+grad^T(2*uP-u))
     '''
     pass
 
-
 ################
 # Utils
 ################
+
 
 @numba.jit(["void(T[:,:],T[:,:,:])".replace('T', T) for T in ['f4', 'f8']], target='cpu', cache=True, nopython=True)
 def grad_2d(x, Dx):
@@ -481,27 +408,27 @@ def grad_2d(x, Dx):
 @numba.jit(["void(T[:,:,:],T[:,:])".replace('T', T) for T in ['f4', 'f8']], target='cpu', cache=True, nopython=True)
 def gradT_2d(x, Dx):
     Dx[0, 0] = (0 - x[0, 0, 0]
-                + 0 - x[0, 0, 1])
+                +0 - x[0, 0, 1])
     for j in range(1, x.shape[1] - 1):
         Dx[0, j] = (0 - x[0, j, 0]
-                    + x[0, j - 1, 1] - x[0, j, 1])
+                    +x[0, j - 1, 1] - x[0, j, 1])
     Dx[0, j + 1] = (0 - x[0, j + 1, 0]
-                    + x[0, j, 1] - 0)
+                    +x[0, j, 1] - 0)
     for i in range(1, x.shape[0] - 1):
         Dx[i, 0] = (x[i - 1, 0, 0] - x[i, 0, 0]
-                    + 0 - x[i, 0, 1])
+                    +0 - x[i, 0, 1])
         for j in range(1, x.shape[1] - 1):
             Dx[i, j] = (x[i - 1, j, 0] - x[i, j, 0]
-                        + x[i, j - 1, 1] - x[i, j, 1])
+                        +x[i, j - 1, 1] - x[i, j, 1])
         Dx[i, j + 1] = (x[i - 1, j + 1, 0] - x[i, j + 1, 0]
-                        + x[i, j, 1] - 0)
+                        +x[i, j, 1] - 0)
     Dx[i + 1, 0] = (x[i, 0, 0] - 0
-                    + 0 - x[i + 1, 0, 1])
+                    +0 - x[i + 1, 0, 1])
     for j in range(1, x.shape[1] - 1):
         Dx[i + 1, j] = (x[i, j, 0] - 0
-                        + x[i + 1, j - 1, 1] - x[i + 1, j, 1])
+                        +x[i + 1, j - 1, 1] - x[i + 1, j, 1])
     Dx[i + 1, j + 1] = (x[i, j + 1, 0] - 0
-                        + x[i + 1, j, 1] - 0)
+                        +x[i + 1, j, 1] - 0)
 
 # sum (x_{i+1}-x_i)y_i = sum x_i(y_{i-1}-y_i}
 # (x_1-x_0)y_0 -> x_0(0-y_0)
@@ -527,8 +454,7 @@ def normest(op, opT, shape):
         x = opT(op(x))
         x = x / abs(x).sum()
 
-    return sqrt((op(x)**2).sum() / (x**2).sum())
-
+    return sqrt((op(x) ** 2).sum() / (x ** 2).sum())
 
 ################
 # Fidelity objects
@@ -536,6 +462,7 @@ def normest(op, opT, shape):
 
 
 class Fidelity:
+
     def __init__(self, dim):
         self.dim = dim
 
@@ -547,6 +474,7 @@ class Fidelity:
 
 
 class Transport_loss(Fidelity):
+
     def __init__(self, dim, device='cpu'):
         self.dim = dim
 
@@ -558,6 +486,7 @@ class Transport_loss(Fidelity):
                 self.__earth_mover = earth_mover_1D_GPU
                 self.__earth_mover_grad = earth_mover_grad_1D_GPU
         else:
+
             def tmp(x, y, d, func):
                 if hasattr(self, 'store'):
                     if (self.store['u'].shape != x.shape):
@@ -637,6 +566,7 @@ class Transport_loss(Fidelity):
 
 
 class l2_squared_loss(Fidelity):
+
     def __call__(self, x, y):
         if isinstance(x, Element):
             x = x.array
@@ -670,10 +600,10 @@ class l2_squared_loss(Fidelity):
 
         return d
 
-
 ################
 # Test functions
 ################
+
 
 def test_grad(E, shape, eps, axis):
     from numpy import log10, random
@@ -716,6 +646,7 @@ def __test_grad_mat(shape):
         Dx = empty(x.shape[:-1])
         gradT_2d(x, Dx)
         return Dx
+
     print(normest(AT, A, shape + (2,)))
     return
 

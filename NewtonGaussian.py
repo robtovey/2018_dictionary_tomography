@@ -11,33 +11,16 @@ where G(y,\theta) = exp(.5*J(y,\theta/|\theta|)^2-.5*|y|^2
 '''
 from numpy import sqrt, arange, random, maximum, minimum
 from code.bin.manager import context
-from GD_lib import _startup, norm
+from GD_lib import _startup, norm, _step
 from numpy.linalg.linalg import solve, eigvalsh
 
 
-def __derivs(recon):
-    dim = recon.space.dim
-    iso = recon.space.isotropic
-    if dim == 2:
-        if iso:
-            from code.bin.NewtonGaussian2D import derivs_iso as d
-        else:
-            from code.bin.NewtonGaussian2D import derivs_aniso as d
-    else:
-        if iso:
-            from code.bin.NewtonGaussian3D import derivs_iso as d
-        else:
-            from code.bin.NewtonGaussian3D import derivs_aniso as d
-
-    return dim, iso, d
-
-
 def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
-               guess=None, tol=1e-4, min_iter=1, myderivs=__derivs, **kwargs):
+               guess=None, tol=1e-4, min_iter=1, **kwargs):
     c, E, F, nAtoms, max_iter, plot = _startup(
         recon, data, max_iter, view, guess, 1, **kwargs)
     eps = 1e-4
-
+    
     # Stepsizes
     h = [1] * nAtoms
 
@@ -49,7 +32,7 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
     else:
         n = 1
 
-    dim, iso, derivs = myderivs(recon)
+    dim, iso = recon.space.dim, recon.space.isotropic
 
     random.seed(1)
     jj = 1
@@ -73,15 +56,14 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
             for j in tmp:
                 for __ in range(max_iter[1]):
                     BREAK[1] = True
-                    I = c.asarray(recon.I[j:j + 1]).copy()
-                    x = c.asarray(recon.x[j]).copy()
-                    r = c.asarray(recon.r[j]).copy()
-
-                    ___, df, ddf = derivs(
-                        recon[j], Radon, (data + Radon(recon[j]) - R))
+                    ___, df, ddf = Radon.L2_derivs(
+                        recon[j], (data + Radon(recon[j]) - R))
 #                     f += reg(recon[j])
                     df += reg.grad(recon[j])
-                    ddf += reg.hess(recon[j])
+                    try:
+                        ddf += reg.hess(recon[j])[0]
+                    except TypeError:
+                        ddf += reg.hess(recon[j])
 
                     H = 1 / h[j]
 #                     H = max(0, H - eigvalsh(ddf).min())
@@ -92,41 +74,22 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
                         dx = solve(ddf, -df)
                     except Exception as e:
                         raise e
-#                     c.set(recon.I[j:j + 1], I + dx[0])
-                    c.set(recon.x[j], x + dx[1:dim + 1])
-#                     c.set(recon.r[j], r + dx[dim + 1:])
 
-                    c.set(recon.I[j:j + 1], max(0, I + dx[0]))
-#                         c.set(recon.x[j], maximum(-.99,
-#                                                   minimum(.99, x + dx[1:4])))
-                    if iso:
-                        rr = abs(r + dx[dim + 1])
-                    else:
-                        rr = r + dx[dim + 1:]
-                        if rr[0] < 0:
-                            rr[0], rr[3], rr[5] = -rr[0], -rr[3], -rr[5]
-                        if rr[1] < 0:
-                            rr[1], rr[4] = -rr[1], -rr[4]
-                        if rr[2] < 0:
-                            rr[2] = -rr[2]
-                    c.set(recon.r[j], rr)
-
-                    R = Radon(recon[:n])
-                    F[jj] = fidelity(R, data)
-                    E[jj] = F[jj] + reg(recon[:n])
+                    R = _step(recon, Radon, dx, data,
+                              E, F, dim, iso, j, jj, n, fidelity, reg)
 
                     if E[jj] > E[jj - 1]:
-                        c.set(recon.I[j:j + 1], I)
-                        c.set(recon.x[j], x)
-                        c.set(recon.r[j], r)
-                        R = Radon(recon[:n])
+#                         c.set(recon.I[j:j + 1], I)
+#                         c.set(recon.x[j], x)
+#                         c.set(recon.r[j], r)
+#                         R = Radon(recon[:n])
                         E[jj] = E[jj - 1]
                         if h[j] > 2 * eps:
                             BREAK[0] = False
                             BREAK[1] = False
                         h[j] /= 10
                     else:
-                        if norm(dx) > tol * sqrt(I * I + (x * x).sum() + (r * r).sum()):
+                        if norm(dx) > tol:
                             BREAK[0] = False
                             BREAK[1] = False
                         h[j] *= 2
@@ -151,7 +114,7 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
 
 
 def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
-                     guess=None, tol=1e-4, min_iter=1, myderivs=__derivs, **kwargs):
+                     guess=None, tol=1e-4, min_iter=1, **kwargs):
     c, E, F, nAtoms, max_iter, plot = _startup(
         recon, data, max_iter, view, guess, 3, **kwargs)
     eps = 1e-4
@@ -159,7 +122,7 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
     # Stepsizes
     h = [[1] * nAtoms for _ in range(3)]
 
-    _, iso, derivs = myderivs(recon)
+    iso = recon.space.isotropic
     if guess is None:
         R = Radon(recon)
         F[0] = fidelity(R, data)
@@ -194,8 +157,8 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
                         T = c.asarray(getattr(recon, dim[t])[j])
                         old = T.copy()
 
-                        ___, df, ddf = derivs(
-                            recon[j], Radon, (data + Radon(recon[j]) - R))
+                        ___, df, ddf = Radon.L2_derivs(
+                            recon[j], (data + Radon(recon[j]) - R))
                         df += reg.grad(recon[j])
                         ddf += reg.hess(recon[j])
 
@@ -205,7 +168,7 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
 
                         if t == 0:
                             if ddf[0, 0] > 1e-8:
-                                dx = - df[0] / ddf[0, 0]
+                                dx = -df[0] / ddf[0, 0]
                             else:
                                 break
                             T += dx
@@ -213,7 +176,7 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
                         elif t == 1:
                             try:
                                 dx = solve(
-                                    ddf[1:dim + 1, 1:dim + 1], - df[1:dim + 1])
+                                    ddf[1:dim + 1, 1:dim + 1], -df[1:dim + 1])
                             except Exception:
                                 break
                             T += dx
@@ -223,7 +186,7 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
                             t = 2
                             try:
                                 dx = solve(
-                                    ddf[dim + 1:, dim + 1:], - df[dim + 1:])
+                                    ddf[dim + 1:, dim + 1:], -df[dim + 1:])
                             except Exception:
                                 break
                             if iso:
@@ -231,7 +194,7 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
                             else:
                                 T += dx
                                 if T[0] < 0:
-                                    T[0], T[3], T[5] = - \
+                                    T[0], T[3], T[5] = -\
                                         T[0], -T[3], -T[5]
                                 if T[1] < 0:
                                     T[1], T[4] = -T[1], -T[4]

@@ -4,9 +4,9 @@ Created on 5 Apr 2018
 @author: Rob Tovey
 '''
 import odl
-from numpy import isscalar
-from code.bin.dictionary_def import AtomSpace, ProjSpace, ProjElement, VolSpace
-from code.bin.atomFuncs import GaussVolume, GaussTomo
+from numpy import isscalar, random
+from code.dictionary_def import AtomSpace, ProjSpace, ProjElement, VolSpace
+from code.atomFuncs import GaussVolume, GaussTomo
 from code.transport_loss import l2_squared_loss, Transport_loss
 from code.regularisation import null, Joubert, Mass, Radius, Iso
 from GD_lib import linesearch, linesearch_block
@@ -73,8 +73,12 @@ def standardGaussTomo(gt=None, data=None, noise=None, dim=3, device='GPU', isotr
                 data = Radon.range.zero()
             else:
                 data = Radon(gt)
-        if noise is not None:
-            data = data + noise
+    if noise is not None:
+        if data is None:
+            raise ValueError('data is None but I need to add noise...')
+        if isscalar(noise):  # assume variance given
+            noise = random.randn(*data.shape) * noise ** .5
+        data = data + noise
 
     if solver == 'odl':
         if fidelity == 'l2_squared':
@@ -119,13 +123,13 @@ def standardGaussTomo(gt=None, data=None, noise=None, dim=3, device='GPU', isotr
         if reg is None:
             reg = null(None)
         elif reg[0] == 'Joubert':
-            reg = Joubert(dim, *reg[1])
+            reg = Joubert(dim, *reg[1:])
         elif reg[0] == 'Mass':
-            reg = Mass(dim, *reg[1])
+            reg = Mass(dim, *reg[1:])
         elif reg[0] == 'Radius':
-            reg = Radius(dim, *reg[1])
+            reg = Radius(dim, *reg[1:])
         elif reg[0] == 'Iso':
-            reg = Iso(dim, *reg[1])
+            reg = Iso(dim, *reg[1:])
         else:
             raise ValueError(
                 'Given <reg>, %s, was not recognised.' % repr(reg))
@@ -140,6 +144,15 @@ def standardGaussTomo(gt=None, data=None, noise=None, dim=3, device='GPU', isotr
             GD = linesearch
 
         return Radon, view, fidelity, data, ASpace, PSpace, (reg, GD)
+
+
+def file2paraview(fname, vname='view'):
+    from scipy.io import loadmat
+    from pyevtk.hl import imageToVTK
+    from subprocess import run
+    x = loadmat(fname)[vname]
+    imageToVTK('temp', pointData={'intensity': x})
+    run(['paraview', '--data=temp.vti'])
 
 
 def __padshape(arr, shape):

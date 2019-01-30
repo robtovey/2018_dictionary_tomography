@@ -9,8 +9,8 @@ from GD_lib import linesearch as GD
 RECORD = 'multi_aniso_atoms_2D'
 RECORD = None
 import odl
-from code.bin.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
-from code.bin.atomFuncs import GaussTomo, GaussVolume
+from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
+from code.atomFuncs import GaussTomo, GaussVolume
 from numpy import sqrt, pi, zeros, random, arange, log10
 from matplotlib import pyplot as plt, animation as mv
 from code.bin.manager import myManager

@@ -6,7 +6,7 @@ Created on 4 Jan 2018
 import numpy as np
 from numpy import cos, sqrt, empty, sin
 import numba
-from code.bin.dictionary_def import Dictionary, Element
+from code.dictionary_def import Dictionary, Element
 from code.bin.manager import context
 
 
@@ -88,193 +88,59 @@ We make a slight assumption that $p$ is already given in standard ortho
 basis so it is 1 codim and can be factored out of the projection. 
     '''
 
-    def __init__(self, ASpace, VSpace, device='CPU'):
+    def __init__(self, ASpace, VSpace, device='GPU'):
         Dictionary.__init__(self, ASpace, VSpace, isLinear=True)
         self.__device = device.lower()
-        if ASpace.isotropic:
-            if self.ElementSpace.dim == 2:
-                import code.bin.atomic_Radon_2D_numba as myRad
-            elif self.ElementSpace.dim == 3:
-                if len(self.ProjectionSpace.ortho) == 2:
-                    import code.bin.atomic_Radon_3D_numba as myRad
-                else:
-                    import code.bin.atomic_Radon_2p5D_numba as myRad
-        else:
-            if self.ElementSpace.dim == 2:
-                import code.bin.atomic_Radon_2D_numba_anisotropic as myRad
-            elif self.ElementSpace.dim == 3:
-                if len(self.ProjectionSpace.ortho) == 2:
-                    import code.bin.atomic_Radon_3D_numba_anisotropic as myRad
-                else:
-                    import code.bin.atomic_Radon_2p5D_numba_anisotropic as myRad
+        
+        if self.__device == 'cpu':
+            raise ValueError('CPU processing not yet supported')
+
+        if self.ElementSpace.dim == 2:
+            import code.bin.NewtonBases2D as myRad
+        elif self.ElementSpace.dim == 3:
+            import code.bin.NewtonBases as myRad
+
+        self.__fwrd = myRad.RadProj
+        self.__derivs = myRad.derivs_RadProj
 
         c = context()
-        if self.__device == 'cpu':
-            self.__fwrd = myRad.GaussRadon_CPU
-            self.__diff = [myRad.GaussRadon_DI_CPU,
-                           myRad.GaussRadon_Dx_CPU,
-                           myRad.GaussRadon_Dr_CPU]
-        else:
-            self.__fwrd = myRad.GaussRadon_GPU
-            self.__diff = [myRad.GaussRadon_DI_GPU,
-                           myRad.GaussRadon_Dx_GPU,
-                           myRad.GaussRadon_Dr_GPU]
         self.__params = ((c.copy(VSpace.orientations),)
-                         + tuple(c.copy(x) for x in VSpace.ortho)
-                         + tuple(c.copy(x) for x in VSpace.detector))
+                         +tuple(c.copy(x) for x in VSpace.ortho)
+                         +tuple(c.copy(x) for x in VSpace.detector))
 
-    def __call__(self, atoms, Slice=slice(None)):
-        # Slice is a 1D slice object on orientations
-        R = self.ProjectionSpace.null(Slice)
-
-        if len(self.__params) == 3:
-            tmp = tuple(s[Slice]
-                        for s in self.__params[:-1]) + (self.__params[-1],)
-        else:
-            tmp = tuple(s[Slice]
-                        for s in self.__params[:-2]) + self.__params[-2:]
-        self.__fwrd(atoms.I, atoms.x, atoms.r, *tmp, R.array)
-
+    def __call__(self, atoms):
+        R = self.ProjectionSpace.null()
+        self.__fwrd(atoms, self, R.array)
         return R
 
-    def grad(self, atoms, axis, d, Slice=slice(None)):
-        if isinstance(d, Element):
-            d = d.array
-        if axis == 'I':
-            axis = 0
-        elif axis == 'x':
-            axis = 1
-        elif axis == 'r':
-            axis = 2
-
-        # Pre-allocate
-        if axis == 0:
-            g = empty(atoms.I.shape, dtype=atoms.I.dtype)
-        elif axis == 1:
-            g = empty(atoms.x.shape, dtype=atoms.x.dtype)
+    def L2_derivs(self, atoms, C, order=2):
+        f, df, ddf = self.__derivs(
+            atoms, self, C.array, order)
+        if order == 1:
+            return f, df
         else:
-            g = empty(atoms.r.shape, dtype=atoms.r.dtype)
-
-        self.__diff[axis](atoms.I, atoms.x, atoms.r,
-                          *self.__params,
-                          d, g)
-        if len(self.__params) == 3:
-            tmp = tuple(s[Slice]
-                        for s in self.__params[:-1]) + (self.__params[-1],)
-        else:
-            tmp = tuple(s[Slice]
-                        for s in self.__params[:-2]) + self.__params[-2:]
-            tmp = self.__params
-        self.__diff[axis](atoms.I, atoms.x, atoms.r, *tmp, d, g)
-
-        return g
+            return f, df, ddf
 
 
 class GaussVolume(Dictionary):
-    def __init__(self, ASpace, VSpace, device='cpu'):
+
+    def __init__(self, ASpace, VSpace, device='GPU'):
         Dictionary.__init__(self, ASpace, VSpace, isLinear=True)
         self.__device = device.lower()
-        if ASpace.isotropic:
-            if self.ElementSpace.dim == 2:
-                import code.bin.atomic_Radon_2D_numba as myProj
-            elif self.ElementSpace.dim == 3:
-                import code.bin.atomic_Radon_3D_numba as myProj
-        else:
-            if self.ElementSpace.dim == 2:
-                import code.bin.atomic_Radon_2D_numba_anisotropic as myProj
-            elif self.ElementSpace.dim == 3:
-                import code.bin.atomic_Radon_3D_numba_anisotropic as myProj
 
         if self.__device == 'cpu':
-            self.__proj = myProj.GaussVol_CPU
-        else:
-            self.__proj = myProj.GaussVol_GPU
+            raise ValueError('CPU processing not yet supported')
+
+        if self.ElementSpace.dim == 2:
+            import code.bin.NewtonBases2D as myRad
+        elif self.ElementSpace.dim == 3:
+            import code.bin.NewtonBases as myRad
+
+        self.__proj = myRad.VolProj
 
     def __call__(self, atoms):
         u = self.ProjectionSpace.zero()
-        self.__proj(atoms.I, atoms.x, atoms.r,
-                    *self.ProjectionSpace.grid,
-                    u.asarray())
-        return u
-
-
-@numba.jit("void(f8[:],f8[:,:],f8[:],f8[:,:],f8[:],f8[:,:])", target='cpu', nopython=True)
-def BallRadon_2D_CPU(I, x, r, w, p, R):
-    '''
-    u(y) = I*(|y-x|<r)
-    Ru(p,theta) = 2*I*sqrt(r^2-|P_{theta^\perp}(x-p)|^2)
-    d/dxRu = -2*I*P(x-p)/sqrt(r^2-|P_{theta^\perp}(x-p)|^2)
-    d/drRu = 2*I*r/sqrt(r^2-|P_{theta^\perp}(x-p)|^2)
-    '''
-    r2 = r**2
-    for jj in range(w.shape[0]):
-        for kk in range(p.shape[0]):
-            tmp = 0
-            for ii in range(x.shape[0]):
-                inter = (p[kk] - x[ii, 0] * w[jj, 0] - x[ii, 1] * w[jj, 1])**2
-                if inter < r2[ii]:
-                    tmp += 2 * I[ii] * sqrt(r2[ii] - inter)
-            R[jj, kk] = tmp
-
-
-@numba.jit("void(f8[:],f8[:,:],f8[:],f8[:,:],f8[:],f8[:,:])", target='cpu', nopython=True)
-def BallRadon_Dx_2D_CPU(I, x, r, w, p, R):
-    '''
-    u(y) = I*(|y-x|<r)
-    Ru(p,theta) = 2*I*sqrt(r^2-|P_{theta^\perp}(x-p)|^2)
-    d/dxRu = -2*I*P(x-p)/sqrt(r^2-|P_{theta^\perp}(x-p)|^2)
-    P(x-p) = <w,x-p>w
-    '''
-    r2 = r**2
-    for jj in range(w.shape[0]):
-        for kk in range(p.shape[0]):
-            tmp = 0
-            for ii in range(x.shape[0]):
-                IP = x[ii, 0] * w[jj, 0] + x[ii, 1] * w[jj, 1]
-                inter = (p[kk] - IP)**2
-                if inter < r2[ii]:
-                    inter = -2 * I[ii] * IP / sqrt(r2[ii] - inter)
-                    tmp += -2 * I[ii] * sqrt(r2[ii] - inter)
-            R[jj, kk] = tmp
-
-
-@numba.jit("void(f8[:],f8[:,:],f8[:],f8[:],f8[:],f8[:,:])", target='cpu', nopython=True)
-def BallVol_2D_CPU(I, x, r, y0, y1, u):
-    s = r**2
-    for jj in range(y0.shape[0]):
-        for kk in range(y1.shape[0]):
-            tmp = 0
-            for ii in range(x.shape[0]):
-                interior = ((y0[jj] - x[ii, 0])**2 +
-                            (y1[kk] - x[ii, 1])**2)
-                if interior < s[ii]:
-                    tmp += I[ii]
-            u[jj, kk] = tmp
-
-
-class BallRadon(Dictionary):
-    def __init__(self, ASpace, VSpace):
-        Dictionary.__init__(self, ASpace, VSpace, isLinear=True)
-
-    def __call__(self, atoms):
-        R = self.ProjectionSpace.zero()
-        BallRadon_2D_CPU(atoms.I, atoms.x, atoms.r,
-                         self.ProjectionSpace.orientations,
-                         self.ProjectionSpace.detector[0],
-                         R.array)
-        return R
-
-
-class BallVolume(Dictionary):
-    def __init__(self, ASpace, VSpace):
-        Dictionary.__init__(self, ASpace, VSpace, isLinear=True)
-
-    def __call__(self, atoms):
-        u = self.ProjectionSpace.zero()
-        BallVol_2D_CPU(atoms.I, atoms.x, atoms.r,
-                       self.ProjectionSpace.grid[0],
-                       self.ProjectionSpace.grid[1],
-                       u.array)
+        self.__proj(atoms, *self.ProjectionSpace.grid, u.asarray())
         return u
 
 
@@ -292,6 +158,7 @@ def test_grad(space, Radon, eps, axis=None):
 
     def norm2(x):
         return c.sum(c.mul(x.array, x.array)) / 2
+
     n = norm2(R)
 
     for axis in Axis:
@@ -328,7 +195,7 @@ def test_grad(space, Radon, eps, axis=None):
 if __name__ == '__main__':
     from numpy import pi
     import odl
-    from code.bin.dictionary_def import VolSpace, ProjSpace, AtomSpace, ProjElement
+    from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, ProjElement
     from matplotlib import pyplot as plt
 
 #     # 2D comparison

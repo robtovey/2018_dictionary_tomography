@@ -10,9 +10,9 @@ from odl.contrib import mrc
 import odl
 from numpy import linspace, pi, ascontiguousarray
 from code.bin.manager import myManager
-from code.bin.dictionary_def import AtomSpace, VolSpace, ProjSpace, VolElement,\
+from code.dictionary_def import AtomSpace, VolSpace, ProjSpace, VolElement, \
     ProjElement
-from code.bin.atomFuncs import GaussTomo, GaussVolume
+from code.atomFuncs import GaussTomo, GaussVolume
 from code.transport_loss import l2_squared_loss
 from code.regularisation import null
 from KL_GaussRadon import doKL_ProjGDStep_iso
@@ -66,6 +66,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     reg = null(dim)
 
     def guess(d, a): return doKL_ProjGDStep_iso(d, a, 1e-0, Radon)
+
     guess = None
 
     from NewtonGaussian import linesearch as GD

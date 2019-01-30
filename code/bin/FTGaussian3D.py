@@ -259,12 +259,12 @@ def __derivs_aniso_aux(I, x, r, K, g, dg, ddg):
     for i in range(6):
         i0, i1 = ind0[i], ind1[i]
         ddg[4 + i, 4 + i] = g[0] * (rk[i0] * K[i1] * rk[i0] * K[i1]
-                                    - K[i1] * K[i1])
+                                      - K[i1] * K[i1])
         for j in range(i + 1, 6):
             j0, j1 = ind0[j], ind1[j]
             if i0 == j0:
                 ddg[4 + i, 4 + j] = g[0] * (rk[i0] * K[i1] * rk[j0] * K[j1]
-                                            - K[i1] * K[j1])
+                                              - K[i1] * K[j1])
             else:
                 ddg[4 + i, 4 + j] = g[0] * rk[i0] * K[i1] * rk[j0] * K[j1]
 
@@ -746,7 +746,8 @@ if __name__ == '__main__':
 #                               k[:, :2], C, g, dg, ddg,
 #                               array([1, 1, 1, 1], dtype='i4'))
     g, dg, ddg = g.sum(-1), dg.sum(-1), ddg.sum(-1)
-    f, df, ddf = f, array(df, 'complex64').real, array(ddf, 'complex64').real
+    f, df, ddf = f, array(
+        df, 'complex64').real, array(ddf, 'complex64').real
 
     print('Printouts for aniso test:')
 #     print(niceprint(f))
@@ -795,7 +796,8 @@ if __name__ == '__main__':
                             k[:, :2], C, g, dg, ddg,
                             array([1, 1, 1, 1], dtype='i4'))
     g, dg, ddg = g.sum(-1), dg.sum(-1), ddg.sum(-1)
-    f, df, ddf = f, array(df, 'complex64').real, array(ddf, 'complex64').real
+    f, df, ddf = f, array(
+        df, 'complex64').real, array(ddf, 'complex64').real
 
     print('Printouts for iso test:')
 #     print(niceprint(f))

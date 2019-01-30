@@ -11,6 +11,7 @@ THREADS = 128
 @cuda.jit("void(f4[:])", device=True, inline=True, cache=True)
 def __GPU_reduce_1(x):
     cc = cuda.threadIdx.x
+    cuda.syncthreads()
     if THREADS >= 512:
         if cc < 256:
             x[cc] += x[cc + 256]
@@ -39,6 +40,7 @@ def __GPU_reduce_1(x):
 @cuda.jit("void(f4[:,:])", device=True, inline=True, cache=True)
 def __GPU_reduce_2(x):
     cc = cuda.threadIdx.x
+    cuda.syncthreads()
 
     if THREADS >= 512:
         if cc < 256:
@@ -79,6 +81,7 @@ def __GPU_reduce_2(x):
 @cuda.jit("void(f4[:,:])", device=True, inline=True, cache=True)
 def __GPU_reduce_3(x):
     cc = cuda.threadIdx.x
+    cuda.syncthreads()
     if THREADS >= 512:
         if cc < 256:
             x[cc, 0] += x[cc + 256, 0]
@@ -127,6 +130,7 @@ def __GPU_reduce_3(x):
 @cuda.jit("void(f4[:,:],i4)", device=True, inline=True, cache=True)
 def __GPU_reduce_n(x, n):
     cc = cuda.threadIdx.x
+    cuda.syncthreads()
 
     if THREADS >= 512:
         if cc < 256:

@@ -3,7 +3,7 @@ Created on 17 May 2018
 
 @author: Rob Tovey
 '''
-from code.bin.dictionary_def import Dictionary, ProjSpace, AtomElement, VolSpace, AtomSpace,\
+from code.dictionary_def import Dictionary, ProjSpace, AtomElement, VolSpace, AtomSpace, \
     ProjElement, VolElement
 from numpy.fft import fftn, ifftn, fftfreq, fftshift, ifftshift
 from numpy import exp, pi, sqrt, arange, array, where, random
@@ -175,6 +175,7 @@ If both input and output are the same then the grids must be equal.
 
 
 class GaussFTVolume(Dictionary):
+
     def __init__(self, ASpace, PSpace):
         if isinstance(PSpace, ProjSpace):
             self.__grid = tuple(GaussFT.getGrid(PSpace.detector))
@@ -195,10 +196,15 @@ class GaussFTVolume(Dictionary):
     def __call__(self, atoms):
         return ProjElement(self.ProjectionSpace, self.__eval(atoms, self.__grid))
 
-    def derivs(self, atoms):
-        dim = atoms.space.dim
-        iso = atoms.space.isotropic
-        return dim, iso, lambda a, _, C: self.__derivs(a, self.__grid, C)
+    def L2_derivs(self, atoms, C, order=2):
+        # TODO: Update Fourier Transform
+        raise NotImplementedError()
+        f, df, ddf = self.__derivs(
+            atoms, self, C.array, order)
+        if order == 1:
+            return f, df
+        else:
+            return f, df, ddf
 
 
 def doLoc_L2Step(res, atom):
@@ -225,9 +231,9 @@ def doLoc_L2Step(res, atom):
     c.set(atom.x[:], x)
 
     r = c.asarray(atom.r)
-    A = m / sqrt(2 * (2 * pi)**dim)
+    A = m / sqrt(2 * (2 * pi) ** dim)
     if r.shape[1] == 1:
-        A /= r[0]**dim
+        A /= r[0] ** dim
     else:
         A *= r[:dim].prod()
     c.set(atom.I[:], A)
@@ -300,7 +306,7 @@ def _analyticGaussFourier(I, x, r, newI, newx, newr):
     tau = 2 * pi
     if r.shape[1] == 1:
         for i in range(nAtoms):
-            newI[i] = I[i] * sqrt(tau)**dim * (r[i, 0]**dim)
+            newI[i] = I[i] * sqrt(tau) ** dim * (r[i, 0] ** dim)
             # Scalar radii are still reciprocal -> e^{-(x/r)^2}
             newr[i, 0] = tau / r[i, 0]
             for j in range(dim):
@@ -310,7 +316,7 @@ def _analyticGaussFourier(I, x, r, newI, newx, newr):
             det = r[i, 0]
             for j in range(1, dim):
                 det *= r[i, j]
-            newI[i] = I[i] * sqrt(tau)**dim / det
+            newI[i] = I[i] * sqrt(tau) ** dim / det
             for j in range(dim):
                 newx[i, j] = tau * x[i, j]
             if dim == 2:
@@ -323,7 +329,7 @@ def _analyticGaussFourier(I, x, r, newI, newx, newr):
                 newr[i, 2] = tau / r[i, 2]
                 newr[i, 3] = -(tau * r[i, 3]) / (r[i, 0] * r[i, 1])
                 newr[i, 4] = -(tau * r[i, 4]) / (r[i, 1] * r[i, 2])
-                newr[i, 5] = tau * (r[i, 3] * r[i, 4] /
+                newr[i, 5] = tau * (r[i, 3] * r[i, 4] / 
                                     r[i, 1] - r[i, 5]) / (r[i, 0] * r[i, 2])
 
 
@@ -347,7 +353,7 @@ def _analyticGaussiFourier(I, x, r, newI, newx, newr):
             for j in range(dim):
                 newx[i, j] = x[i, j] / tau
             newr[i, 0] = tau / r[i, 0]
-            newI[i] = I[i] / ((newr[i, 0]**dim) * sqrt(tau)**dim)
+            newI[i] = I[i] / ((newr[i, 0] ** dim) * sqrt(tau) ** dim)
     else:
         for i in range(nAtoms):
             if dim == 2:
@@ -360,14 +366,14 @@ def _analyticGaussiFourier(I, x, r, newI, newx, newr):
                 newr[i, 2] = tau / r[i, 2]
                 newr[i, 3] = -(tau * r[i, 3]) / (r[i, 0] * r[i, 1])
                 newr[i, 4] = -(tau * r[i, 4]) / (r[i, 1] * r[i, 2])
-                newr[i, 5] = tau * (r[i, 3] * r[i, 4] /
+                newr[i, 5] = tau * (r[i, 3] * r[i, 4] / 
                                     r[i, 1] - r[i, 5]) / (r[i, 0] * r[i, 2])
             for j in range(dim):
                 newx[i, j] = x[i, j] / tau
             det = newr[i, 0]
             for j in range(1, dim):
                 det *= newr[i, j]
-            newI[i] = I[i] * det / sqrt(tau)**dim
+            newI[i] = I[i] * det / sqrt(tau) ** dim
 
 
 def _tomesh(v):
@@ -404,23 +410,23 @@ if __name__ == '__main__':
         if len(sz) == 2:
             X = [x[j] - a.x[i, j] for j in range(2)]
             Rx = [a.r[i, 0] * X[0] + a.r[i, 2] * X[1], a.r[i, 1] * X[1]]
-            volRep += a.I[i] * exp(-(Rx[0]**2 + Rx[1]**2) / 2)
+            volRep += a.I[i] * exp(-(Rx[0] ** 2 + Rx[1] ** 2) / 2)
         else:
             X = [x[j] - a.x[i, j] for j in range(3)]
             Rx = [
                 a.r[i, 0] * X[0] + a.r[i, 3] * X[1] + a.r[i, 5] * X[2],
                 a.r[i, 1] * X[1] + a.r[i, 4] * X[2],
                 a.r[i, 2] * X[2]]
-            volRep += a.I[i] * exp(-(Rx[0]**2 + Rx[1]**2 + Rx[2]**2) / 2)
+            volRep += a.I[i] * exp(-(Rx[0] ** 2 + Rx[1] ** 2 + Rx[2] ** 2) / 2)
     # [sqrt(2pi)I/|R|] e^{-i k\cdot 2pi m} e^{-|2piR^{-1}k|^2/2}
     ftRep = 0
     for i in range(len(a)):
         if len(sz) == 2:
             det = a.r[i, 0] * a.r[i, 1]
             Rx = [a.r[i, 1] * k[0], a.r[i, 0] * k[1] - a.r[i, 2] * k[0]]
-            ftRep += (a.I[i] * sqrt(2 * pi)**len(sz) / det) * \
+            ftRep += (a.I[i] * sqrt(2 * pi) ** len(sz) / det) * \
                 exp((-2 * pi * 1j) * (k[0] * a.x[i, 0] + k[1] * a.x[i, 1])) * \
-                exp(-(Rx[0]**2 + Rx[1]**2) * (2 * pi * pi / (det * det)))
+                exp(-(Rx[0] ** 2 + Rx[1] ** 2) * (2 * pi * pi / (det * det)))
         else:
             det = a.r[i, 0] * a.r[i, 1] * a.r[i, 2]
             newr = [1 / a.r[i, 0], 1 / a.r[i, 1], 1 / a.r[i, 2],
@@ -429,16 +435,16 @@ if __name__ == '__main__':
                     (a.r[i, 3] * a.r[i, 4] / a.r[i, 1] - a.r[i, 5]) / (a.r[i, 0] * a.r[i, 2])]
             Rx = [newr[0] * k[0], newr[3] * k[0] + newr[1] * k[1],
                   newr[5] * k[0] + newr[4] * k[1] + newr[2] * k[2]]
-            ftRep += (a.I[i] * sqrt(2 * pi)**len(sz) / det) * \
+            ftRep += (a.I[i] * sqrt(2 * pi) ** len(sz) / det) * \
                 exp((-2 * pi * 1j) * (k[0] * a.x[i, 0] + k[1] * a.x[i, 1] + k[2] * a.x[i, 2])) * \
-                exp(-(Rx[0]**2 + Rx[1]**2 + Rx[2]**2) * (2 * pi * pi))
+                exp(-(Rx[0] ** 2 + Rx[1] ** 2 + Rx[2] ** 2) * (2 * pi * pi))
 
     # e^{-ik\cdot 2pi x0}
     if len(sz) == 2:
         P = exp(-1j * 2 * pi * (k[0] * x[0].item(0) + k[1] * x[1].item(0)))
     else:
         P = exp(-1j * 2 * pi * (k[0] * x[0].item(0) + k[1] * x[1].item(0)
-                                + k[2] * x[2].item(0)))
+                                +k[2] * x[2].item(0)))
 
     FT = GaussFT(vSpace)
     gFT = GaussFT(aSpace)

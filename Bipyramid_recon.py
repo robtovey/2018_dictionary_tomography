@@ -6,8 +6,8 @@ Created on 29 Mar 2018
 from os.path import join
 from KL_GaussRadon import doKL_ProjGDStep_iso
 from code import standardGaussTomo
-RECORD = join('store', 'Bipyramid_rand200')
-# RECORD = None
+RECORD = join('store', 'Bipyramid_rand200_noise')
+RECORD = None
 from numpy import loadtxt, asarray, ascontiguousarray, pi, sqrt
 from code.bin.manager import myManager
 from PIL import Image
@@ -96,7 +96,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #         __makeVid(writer, plt, stage=3)
 #     exit()
 
-    if False:
+    if True:
         Radon, view, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
             data=data / data.max(), dim=3, device='GPU', isotropic=False,
             vol_box=[-1, 1], vol_size=(data.shape[1], data.shape[1], data.shape[2]),
@@ -135,7 +135,11 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     #        guess=guess, RECORD=RECORD, tol=1e-6, min_iter=10,
     #        myderivs=FT.derivs)
 
-    #     savemat(join('store', 'Bipyramid_recon'), {'view': view(recon).asarray()})
+        savemat(join('store', 'Bipyramid_recon_' + str(nAtoms)),
+                {'view': view(recon).asarray(),
+                 'X': c.asarray(recon.x),
+                 'R': c.asarray(recon.r),
+                 'I': c.asarray(recon.I), })
     else:
         import odl
         vol = (data.shape[1], data.shape[1], data.shape[2])
@@ -160,14 +164,14 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
         x = x.asarray()
         savemat(join('store', 'Bipyramid_recon_TV'), {'view': x})
 
-from matplotlib import pyplot as plt
-y = loadmat(join('store', 'Bipyramid_recon'))
-n, y = 2, y['view']
-from GD_lib import _get3DvolPlot
-plt.close()
-plt.figure()
-_get3DvolPlot(None, x[::n, ::n, ::n], (-168, -158), .07)
+# from matplotlib import pyplot as plt
+# y = loadmat(join('store', 'Bipyramid_recon'))
+# n, y = 2, y['view']
+# from GD_lib import _get3DvolPlot
+# plt.close()
 # plt.figure()
-# _get3DvolPlot(None, y[::n, ::n, ::n], (-168, -158), .05)
-plt.show()
-exit()
+# _get3DvolPlot(None, x[::n, ::n, ::n], (-168, -158), .07)
+# # plt.figure()
+# # _get3DvolPlot(None, y[::n, ::n, ::n], (-168, -158), .05)
+# plt.show()
+# exit()

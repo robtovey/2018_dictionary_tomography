@@ -3,7 +3,7 @@ Created on 21 May 2018
 
 @author: Rob Tovey
 '''
-from numpy import prod, zeros, sqrt, arange, random, maximum
+from numpy import prod, zeros, sqrt, arange, random, maximum, minimum
 from code.bin.manager import context
 from skimage import measure
 
@@ -16,7 +16,7 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
 
     # Stepsizes
     h = [1e-2] * nAtoms
-    dim = 'Ixr'
+    dim, iso = recon.space.dim, recon.space.isotropic
 
     if guess is None:
         R = Radon(recon)
@@ -47,34 +47,25 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
             for j in tmp:
                 for __ in range(max_iter[1]):
                     BREAK[1] = True
-                    grad = [Radon.grad(recon[j], d, fidelity.grad(
-                        R, data, axis=0)) + reg.grad(recon[j], axis=d)
-                        for d in dim]
-                    T = [c.asarray(getattr(recon, d)[j]) for d in dim]
-                    old = [t.copy() for t in T]
+                    ___, df = Radon.L2_derivs(recon[j], (data + Radon(recon[j]) - R),
+                                              order=1)
+                    df += reg.grad(recon[j])
 
-                    c.set(getattr(recon, dim[0])[j:j + 1],
-                          maximum(0, T[0] - h[j] * grad[0]))
-                    c.set(getattr(recon, dim[1])[j:j + 1],
-                          T[1] - h[j] * grad[1])
-                    c.set(getattr(recon, dim[2])[j:j + 1],
-                          T[2] - h[j] * grad[2])
+                    R = _step(recon, Radon, -df, data,
+                              E, F, dim, iso, j, jj, n, fidelity, reg)
 
-                    R = Radon(recon[:n])
-                    F[jj] = fidelity(R, data)
-                    E[jj] = F[jj] + reg(recon[:n])
                     if E[jj] > E[jj - 1]:
-                        for t in range(3):
-                            c.set(getattr(recon, dim[t])[j:j + 1], old[t])
                         E[jj] = E[jj - 1]
+                        if h[j] > 2 * eps:
+                            BREAK[0] = False
+                            BREAK[1] = False
                         h[j] /= 10
                     else:
+                        if norm(df) > tol:
+                            BREAK[0] = False
+                            BREAK[1] = False
                         h[j] *= 2
-                        for t in range(3):
-                            if norm(old[t] - T[t]) > tol * norm(old[t]):
-                                BREAK[0] = False
-                                BREAK[1] = False
-                    h[j] = max(h[j], eps)
+                    h[j] = min(max(h[j], eps), 1 / eps)
 
                     jj += 1
                     if BREAK[1]:
@@ -82,10 +73,10 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
             if BREAK[0] and _ > min_iter:
                 break
 
-            plot(recon, R, E, F, n, _,  jj)
+            plot(recon, R, E, F, n, _, jj)
         n += 1
 
-    plot(recon, R, E, F, n, _,  jj, True)
+    plot(recon, R, E, F, n, _, jj, True)
     return recon, E[:jj], F[:jj]
 
 
@@ -172,7 +163,7 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
             if BREAK[0] and _ > min_iter:
                 break
 
-            plot(recon, R, E, F, n, _,  jj)
+            plot(recon, R, E, F, n, _, jj)
         n += 1
 
     plot(recon, R, E, F, n, _, jj, True)
@@ -183,7 +174,7 @@ def norm(x):
     return sqrt((x * x).sum())
 
 
-def _startup(recon, data, max_iter, view, guess,  L, gt=None, RECORD=None, thresh=None, angles=None):
+def _startup(recon, data, max_iter, view, guess, L, gt=None, RECORD=None, thresh=None, angles=None):
     '''
     recon is element of atom space
     L is number of energy recordings per iter
@@ -217,13 +208,17 @@ def _startup(recon, data, max_iter, view, guess,  L, gt=None, RECORD=None, thres
     if dim == 2:
         fig, ax = plt.subplots(2, 3, figsize=(20, 10))
         if gt is None:
+
             def plotter(recon, R, E, F, jj):
                 n = max_iter[1]
                 return _plot2D(ax, view(recon), R, data, E[::n], F[::n], jj // (n * L))
+
         else:
+
             def plotter(recon, R, E, F, jj):
                 n = max_iter[1]
                 return _plot2DwithGT(ax, view(recon), gt, R, data, E[::n], F[::n], jj // (n * L))
+
     else:
         from mpl_toolkits.mplot3d.art3d import Poly3DCollection
         fig, ax = plt.subplots(2, 4, figsize=(20, 10))
@@ -242,6 +237,7 @@ def _startup(recon, data, max_iter, view, guess,  L, gt=None, RECORD=None, thres
             def plotter(recon, R, E, F, jj):
                 n = max_iter[1]
                 return _plot3D(ax, view(recon), R, data, E[::n], F[::n], jj // (n * L), len(recon), thresh, angles)
+
         else:
             ax[0, 1].remove()
             ax[0, 1] = fig.add_subplot(242, projection='3d')
@@ -257,6 +253,7 @@ def _startup(recon, data, max_iter, view, guess,  L, gt=None, RECORD=None, thres
             def plotter(recon, R, E, F, jj):
                 n = max_iter[1]
                 return _plot3DwithGT(ax, view(recon), gt, R, data, E[::n], F[::n], jj // (n * L), len(recon), thresh, angles)
+
     if RECORD is not None:
         writer = __makeVid(fig, RECORD, stage=1)
 
@@ -269,7 +266,9 @@ def _startup(recon, data, max_iter, view, guess,  L, gt=None, RECORD=None, thres
                 __makeVid(writer, plt, stage=2)
                 print('%.2f, %.2f, % 5.3f' % (n / nAtoms,
                                               i / max_iter[0], E[jj - 1]))
+
     else:
+
         def do_plot(recon, r, e, f, n, i, jj, end=False):
             if end:
                 print('Reconstruction Finished', jj, F[:jj].min())
@@ -391,7 +390,7 @@ def _plot3DwithGT(ax, recon, gt, R, data, E, F, jj, nAtoms, thresh, angles):
         tmp = recon.asarray()
         m = _get3DvolPlot(ax[1, 0], tmp, angle=angles[0], thresh=thresh)
         m = _get3DvolPlot(ax[1, 1], tmp, angle=angles[1], m=m)
-    except ValueError:
+    except Exception:
         pass
     ax[1, 0].set_title('Recon, view from orientation: ' + str(angles[0]))
     ax[1, 1].set_title('Recon, view from orientation: ' + str(angles[1]))
@@ -476,3 +475,47 @@ def __makeVid(*args, stage=0, fps=5):
     elif stage == 3:
         args[0].finish()
         args[1].show(block=True)
+
+
+def _step(recon, Radon, d, data, E, F, dim, iso, j, jj, n, fidelity, reg):
+    c = context()
+
+    I = c.asarray(recon.I[j:j + 1]).copy()
+    x = c.asarray(recon.x[j]).copy()
+    r = c.asarray(recon.r[j]).copy()
+
+#     c.set(recon.I[j:j + 1], I + d[0])
+    c.set(recon.x[j], x + d[1:dim + 1])
+#     c.set(recon.r[j], r + d[dim + 1:])
+
+    c.set(recon.I[j:j + 1], max(0, I + d[0]))
+#     c.set(recon.x[j], maximum(-.99, minimum(.99, x + d[1:1 + dim])))
+    if iso:
+        rr = abs(r + d[dim + 1])
+    else:
+        rr = r + d[dim + 1:]
+        if dim == 2:
+            if rr[0] < 0:
+                rr[0], rr[2] = -rr[0], -rr[2]
+            if rr[1] < 0:
+                rr[1] = -rr[1]
+        else:
+            if rr[0] < 0:
+                rr[0], rr[3], rr[5] = -rr[0], -rr[3], -rr[5]
+            if rr[1] < 0:
+                rr[1], rr[4] = -rr[1], -rr[4]
+            if rr[2] < 0:
+                rr[2] = -rr[2]
+    c.set(recon.r[j], rr)
+    
+    R = Radon(recon[:n])
+    F[jj] = fidelity(R, data)
+    E[jj] = F[jj] + reg(recon[:n])
+
+    if E[jj] > E[jj - 1]:
+        c.set(recon.I[j:j + 1], I)
+        c.set(recon.x[j], x)
+        c.set(recon.r[j], r)
+        R = Radon(recon[:n])
+    
+    return R

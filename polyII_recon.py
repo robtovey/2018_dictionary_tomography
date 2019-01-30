@@ -5,7 +5,7 @@ Created on 31 Mar 2018
 '''
 from code.transport_loss import l2_squared_loss
 from os.path import join
-from GD_lib import linesearch as GD
+from NewtonGaussian import linesearch as GD
 RECORD = join('store', 'polyII')
 RECORD = None
 if RECORD is not None:
@@ -13,8 +13,8 @@ if RECORD is not None:
     matplotlib.use('Agg')
 import odl
 from odl.contrib import mrc
-from code.bin.dictionary_def import VolSpace, ProjSpace, AtomSpace, ProjElement
-from code.bin.atomFuncs import GaussTomo, GaussVolume
+from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, ProjElement
+from code.atomFuncs import GaussTomo, GaussVolume
 from numpy import sqrt, zeros, random, arange, asarray, ascontiguousarray, log10
 from matplotlib import pyplot as plt, animation as mv
 from code.bin.manager import myManager
@@ -34,6 +34,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
         plt.pause(.1)
     plt.show()
     exit()
+    raise Exception('Weird dataset... Background subtraction?')
     # First dimension is angle, second is width, third is slice
     data = asarray(data)
     # Space settings:
@@ -62,10 +63,11 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     #####
     def newAtoms(n, seed=None):
         tmp = ASpace.random(n, seed=seed)
-        c.set(tmp.r, 10, (slice(None), slice(None, 3)))
+        c.set(tmp.r, 2, (slice(None), slice(None, 3)))
         c.set(tmp.r, 0, (slice(None), slice(3, None)))
-        c.set(tmp.I[:], 1)
+        c.set(tmp.I[:], .1)
         return tmp
+
     nAtoms = 50
     recon = newAtoms(nAtoms, 1)
     #####
@@ -75,12 +77,8 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     R = Radon(recon)
     # Reconstruction:
     fidelity = l2_squared_loss(dim)
-    reg = Joubert(dim, 1e-1, 1e+2, (1e-1**dim, 1e+3))
+    reg = Joubert(dim, 1e-1, 1e+2, (1e-1 ** dim, 1e+3))
     reg = null(dim)
 
-#     def guess(d, a): return doKL_ProjGDStep_2Diso(d, a, 1e-0, Radon)
-#     def guess(d, a): return doKL_LagrangeStep_2Diso(d, a, 1e-3, Radon)
-    def guess(d, a): return a
-
     GD(recon, data, [100, 1], fidelity, reg, Radon, view,
-       dim='xrI', guess=guess, RECORD=RECORD)
+       guess=None, RECORD=RECORD)

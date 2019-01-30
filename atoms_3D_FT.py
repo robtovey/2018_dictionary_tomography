@@ -13,8 +13,8 @@ if RECORD is not None:
     import matplotlib
     matplotlib.use('Agg')
 import odl
-from code.bin.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
-from code.bin.atomFuncs import GaussTomo, GaussVolume
+from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
+from code.atomFuncs import GaussTomo, GaussVolume
 from numpy import sqrt, pi
 from code.bin.manager import myManager
 
@@ -69,7 +69,6 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     from NewtonGaussian import linesearch as GD
 
     GD(gFT(recon), dFT(gt_sino), [100, 1, 100], fidelity, reg, FT, vview,
-       gt=gt_view, guess=guess, RECORD=RECORD, tol=1e-10, min_iter=10,
-       myderivs=FT.derivs)
+       gt=gt_view, guess=guess, RECORD=RECORD, tol=1e-10, min_iter=10)
 #     GD(recon, gt_sino, [100, 1, 100], fidelity, reg, Radon, view,
 #        gt=gt_view, guess=guess, RECORD=RECORD, tol=1e-10, min_iter=10)

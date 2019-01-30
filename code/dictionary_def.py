@@ -3,10 +3,10 @@ Created on 4 Jan 2018
 
 @author: Rob Tovey
 '''
-from numpy import zeros, concatenate, ones, asarray, tile, isscalar, squeeze,\
+from numpy import zeros, concatenate, ones, asarray, tile, isscalar, squeeze, \
     array, prod
 from numpy.random import rand, seed as np_seed
-from .manager import context
+from .bin.manager import context
 import odl
 
 
@@ -51,6 +51,7 @@ class Dictionary:
 
 
 class Space:
+
     def __init__(self, dtype):
         self.isLinear = False
         self.dtype = dtype
@@ -153,6 +154,7 @@ class Element:
 
 
 class AtomSpace(Space):
+
     def __init__(self, dim, isotropic=True):
         self.dim = dim
         self.isLinear = True
@@ -168,19 +170,19 @@ class AtomSpace(Space):
         if seed is not None:
             np_seed(seed)
         if self.isotropic:
-            r = 1
+            r = rand(n, 1) + 1
         else:
-            r = (self.dim * (self.dim + 1)) // 2
-        if r == 1:
-            return AtomElement(self, 2 * rand(n, self.dim) - 1, rand(n, r) / 20, rand(n))
-        else:
-            return AtomElement(self, 2 * rand(n, self.dim) - 1, rand(n, r) * 30, rand(n))
+            r = rand(n, (self.dim * (self.dim + 1)) // 2) + 1
+            r[:, self.dim:] /= 4
+        
+        return AtomElement(self, .8 * (2 * rand(n, self.dim) - 1), r, 2 * rand(n))
 
     def copy(self):
         return AtomSpace(self.dim, self.isotropic)
 
 
 class AtomElement(Element):
+
     def __init__(self, space, x, r, I):
         Element.__init__(self, space)
 
@@ -310,6 +312,7 @@ class AtomElement(Element):
 
 
 class VolSpace(Space):
+
     def __init__(self, odlSpace):
         self.odlSpace = odlSpace
         c = context()
@@ -343,6 +346,7 @@ class VolSpace(Space):
 
 
 class VolElement(Element):
+
     def __init__(self, space, u):
         Element.__init__(self, space)
         if isscalar(u) or (u.size == 1):
@@ -372,6 +376,7 @@ class VolElement(Element):
 
 
 class ProjSpace(Space):
+
     def __init__(self, angles=None, detector=None, orientations=None, ortho=None):
         from .atomFuncs import theta_to_vec, perp
         c = context()

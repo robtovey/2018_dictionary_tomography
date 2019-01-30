@@ -52,11 +52,12 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     #####
     def newAtoms(n, seed=None):
         tmp = ASpace.random(n, seed=seed)
-        c.set(tmp.r, 5, (slice(None), slice(None, 3)))
+        c.set(tmp.r, 1, (slice(None), slice(None, 3)))
         c.set(tmp.r, 0, (slice(None), slice(3, None)))
-        c.set(tmp.I[:], 1e-1)
+        c.set(tmp.I[:], 1e-2)
 #         c.set(tmp.x, 0, (slice(None), [2]))
         return tmp
+
     nAtoms = 20
     recon = newAtoms(nAtoms, 1)
     #####
@@ -69,10 +70,11 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     exit()
 
     def guess(d, a): return doKL_ProjGDStep_iso(d, a, 1e-0, Radon)
+
     guess = None
 
     GD(recon, data, [100, 1, 100], fidelity, reg, Radon, view,
-       guess=guess, RECORD=RECORD)
+       thresh=.1, guess=guess, RECORD=RECORD)
 
 #     from Fourier_Transform import GaussFT, GaussFTVolume
 #     gFT = GaussFT(ASpace)

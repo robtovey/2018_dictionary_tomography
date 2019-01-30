@@ -7,8 +7,8 @@ from code.transport_loss import l2_squared_loss, Transport_loss
 from KL_GaussRadon import doKL_LagrangeStep_iso, doKL_ProjGDStep_iso
 from GD_lib import linesearch as GD
 import odl
-from code.bin.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
-from code.bin.atomFuncs import GaussTomo, GaussVolume
+from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
+from code.atomFuncs import GaussTomo, GaussVolume
 from numpy import sqrt, pi
 from code.bin.manager import myManager
 from code.regularisation import Joubert, null

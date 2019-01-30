@@ -7,23 +7,24 @@ from KL_GaussRadon import doKL_ProjGDStep_iso
 from os.path import join
 from Fourier_Transform import doLoc_L2Step
 from code import standardGaussTomo
-RECORD = join('store', 'mesh_rand30_gd')
-# RECORD = None
-from code.bin.dictionary_def import AtomElement
+RECORD = join('store', 'mesh_rand30_radius')
+RECORD = None
+from code.dictionary_def import AtomElement
 from numpy import sqrt, pi
 from code.bin.manager import myManager
-
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
     Radon, view, fidelity, _, ASpace, PSpace, params = standardGaussTomo(
         dim=3, device='GPU', isotropic=False,
         angle_range=(0, pi), angle_num=50,
         vol_box=[-1, 1], vol_size=32, det_box=[-1.4, 1.4], det_size=64,
-        fidelity='l2_squared', reg=None, solver='other'
+        fidelity='l2_squared', reg=None,
+        solver='Newton'
     )
     reg, GD = params
     vol = view.ProjectionSpace
 
+#####
     # Initiate Data:
     #####
     # # These lines initiate the 2 atom demo, seed=200 is a good one
@@ -36,39 +37,36 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     from numpy import meshgrid, linspace, concatenate
     x = concatenate([x.reshape(-1, 1) for x in
                      meshgrid(*([linspace(-.8, .8, 3), ] * 3))], axis=1)
-    gt = AtomElement(ASpace, x, 20, 1)
-#     recon = AtomElement(ASpace, [[.2, .5, 0], [-.2, -.5, 0]], [30, 10], 1)
+    gt = AtomElement(ASpace, x, 2.5, 1)
     # # These lines generate random atoms
-    nAtoms = 30
+    nAtoms = 27
 #     gt = ASpace.random(nAtoms, seed=6)  # 0,1,3,6,8
     recon = ASpace.random(nAtoms, seed=1)
-    c.set(recon.r, 5, (slice(None), slice(None, 3)))
+    c.set(recon.r, 1.5, (slice(None), slice(None, 3)))
     c.set(recon.r, 0, (slice(None), slice(3, None)))
     c.set(recon.I[:], 0.01)
-#     c.set(gt.I[:], 1)
     #####
     nAtoms = recon.I.shape[0]
     gt_sino = Radon(gt)
     gt_view = view(gt)
     R = Radon(recon)
 
-#     from GD_lib import _get3DvolPlot
+#     from numpy import random
+#     random.seed(0)
+#     gt_sino.array += .001**.5 * random.randn(*gt_sino.shape)
+#     gt_sino.array += .01**.5 * random.randn(*gt_sino.shape)
+#     gt_sino.array += .05**.5 * random.randn(*gt_sino.shape)
+
 #     from matplotlib import pyplot as plt
-#     _get3DvolPlot(None, gt_view.asarray(), (15, 25), 0.03)
-#     plt.title('GT mesh')
+#     from GD_lib import _get3DvolPlot
+#     _get3DvolPlot(None, view(gt).asarray(), (15, 25), 0.03)
+#     plt.title('Ground Truth', {'fontsize': 26})
+#     plt.savefig('store/mesh_gt.eps', format='eps', dpi=600)
 #     plt.show()
 #     exit()
-#     while True:
-#         for i in range(gt_sino.shape[0]):
-#             plt.gca().clear()
-#             gt_sino.plot(plt, Slice=[i])
-#             plt.title(str(i))
-#             plt.pause(.1)
-#     exit()
-
 
 #     #####
-#     from code.bin.atomFuncs import test_grad
+#     from code.atomFuncs import test_grad
 #     test_grad(ASpace, Radon, [10**-(k + 1) for k in range(6)])
 #     exit()
 #     #####
@@ -78,9 +76,16 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     def guess(d, a): return a
     guess = None
 
-    GD(recon, gt_sino, [200, 1, 100], fidelity, reg, Radon, view,
+    GD(recon, gt_sino, [100, 1, 100], fidelity, reg, Radon, view,
        gt=gt_view, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=100,
        angles=((15, 25), (15, 115)), thresh=.03)
+
+#     from GD_lib import _get3DvolPlot
+#     _get3DvolPlot(None, view(recon).asarray(), (15, 25), 0.03)
+#     plt.title('Reconstruction with Noise', {'fontsize': 26})
+#     plt.savefig('store/mesh_noise.eps', format='eps', dpi=600)
+#     plt.show()
+#     exit()
 
 #     from Fourier_Transform import GaussFT, GaussFTVolume
 #     gFT = GaussFT(ASpace)

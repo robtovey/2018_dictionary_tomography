@@ -301,36 +301,40 @@ class Volume(Regulariser):
 
 
 class Radius(Regulariser):
-    def __init__(self, dim, s):
-        # reg = -s*log(det(r))
+    def __init__(self, dim, r0, s, k):
+        # reg = sum s*(r-r_0)^{-k}
         self.dim = dim
+        self.r0 = r0
         self.s = s
+        self.k = -k
 
     def __call__(self, atoms):
-        # reg = -s*log(det(r))
+        # reg = sum s*(r-r_0)^{-k}
         c = context()
         r = c.asarray(atoms.r)
 
-        if r[:, :self.dim].min() <= 0:
+        if r[:, :self.dim].min() <= self.r0:
             return infty
         if atoms.space.isotropic:
-            d = self.dim * log(r)
+            d = self.dim * (r - self.r0)**self.k
         else:
-            d = -log(r[:, :self.dim]).sum(1)
+            d = ((r[:, :self.dim] - self.r0)**self.k).sum(axis=1)
 
         return self.s * d.sum()
 
     def grad(self, atoms, axis=None):
-        # reg = -s*log(det(r))
+        # reg = sum s*(r-r_0)^{-k}
         c = context()
         I, x, r = c.asarray(atoms.I), c.asarray(atoms.x), c.asarray(atoms.r)
 
         dI = 0 * I
         dx = 0 * x
         if atoms.space.isotropic:
-            dr = self.dim / r
+            dr = self.dim * self.k * (r - self.r0)**(self.k - 1)
         else:
-            dr = -1 / r
+            dr = r.copy()
+            dr[:, :self.dim] = self.k * \
+                (r[:, :self.dim] - self.r0)**(self.k - 1)
             dr[:, self.dim:] = 0
 
         if axis == 0 or axis == 'I':
@@ -345,31 +349,27 @@ class Radius(Regulariser):
         return self.s * d
 
     def hess(self, atoms):
-        # reg(atoms) = -s*log(det(r))
-        # d_y = \pm s/y
-        # dd_{yz} = \mp s/y^2
+        # reg = sum s*(r-r_0)^{-k}
         c = context()
         r = c.asarray(atoms.r)
         D = self.dim
 
         if atoms.space.isotropic:
-            dd = zeros((D + 2, D + 2))
+            dd = zeros((r.shape[0], D + 2, D + 2))
         else:
-            dd = zeros((int(1 + D + (D * (D + 1)) / 2),
+            dd = zeros((r.shape[0],
+                        int(1 + D + (D * (D + 1)) / 2),
                         int(1 + D + (D * (D + 1)) / 2)))
-
-        # dd_{II}
-        dd[0, 0] = 0
-        # dd_{xx}
-        dd[1:1 + D, 1:1 + D] = 0
 
         if atoms.space.isotropic:
             # dd_{rr}
-            dd[1 + D, 1 + D] = -D / (r * r)
+            dd[:, 1 + D, 1 + D] = D * self.k * \
+                (self.k - 1) * (r - self.r0)**(self.k - 2)
         else:
             # dd_{rr}
             for i in range(D):
-                dd[1 + D + i, 1 + D + i] = 1 / (r[:, i] * r[:, i])
+                dd[:, 1 + D + i, 1 + D + i] = self.k * \
+                    (self.k - 1) * (r[:, i] - self.r0)**(self.k - 2)
 
         return self.s * dd
 

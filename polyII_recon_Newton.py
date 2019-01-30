@@ -5,11 +5,11 @@ Created on 28 Jun 2018
 '''
 from os.path import join
 from code.bin.manager import myManager
-from code.bin.dictionary_def import VolElement, AtomElement
+from code.dictionary_def import VolElement, AtomElement
 from KL_GaussRadon import doKL_ProjGDStep_iso
 from code import standardGaussTomo
-RECORD = join('store', 'polyII_rand200_FT')
-# RECORD = None
+RECORD = join('store', 'polyII_rand200_Evren')
+RECORD = None
 from odl.contrib import mrc
 from numpy import sqrt, ascontiguousarray, pi, pad
 from scipy.io import savemat, loadmat
@@ -92,7 +92,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     Radon, view, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
         gt=gt, dim=3, device='GPU', isotropic=False,
         angle_range=([-pi / 3, 0], [pi / 3, pi / 2]), angle_num=[61, 1],
-        vol_box=[-1, 1], det_box=[-sqrt(3), sqrt(3)],
+        vol_box=[-1, 1], det_box=[-sqrt(3), sqrt(3)], noise=0 * 0.1,
         fidelity='l2_squared', reg=None, solver='Newton'
     )
 #     Radon, view, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
@@ -102,7 +102,6 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #         fidelity='l2_squared', reg=None, solver='Newton'
 #     )
     reg, GD = params
-
 #     recon = loadmat(join('store', 'polyII_recon'))
 #     x, recon = recon['view'], AtomElement(
 #         ASpace, recon['X'], recon['R'], recon['I'])
@@ -110,16 +109,17 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #           ((abs(gt - x)**2).sum() / gt.size, (abs((data - Radon(recon)).asarray())**2).sum() / data.asarray().size))
 #     exit()
 
-    nAtoms = 200
+    nAtoms = 20
     recon = ASpace.random(nAtoms, seed=1)
     c.set(recon.x[:], c.mul(recon.x, 1 / 3))
-    c.set(recon.r, 10, (slice(None), slice(None, 3)))
+    c.set(recon.r, 1, (slice(None), slice(None, 3)))
     c.set(recon.r, 0, (slice(None), slice(3, None)))
-    c.set(recon.I, 0.1)
+    c.set(recon.I, 0.01)
+#     c.set(recon.r, 2, (slice(None), slice(None, 3)))
+#     c.set(recon.I, 0.01)
     nAtoms = recon.I.shape[0]
     gt = VolElement(view.ProjectionSpace, gt)
     R = Radon(recon)
-
 
 #     from matplotlib import pyplot as plt
 #     while True:
@@ -134,22 +134,22 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     def guess(d, a): return a
     guess = None
 
-#     GD(recon, data, [100, 1, 100], fidelity, reg, Radon, view,
-#        gt=gt, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=2000,
-#        thresh=1.5, angles=((20, 45), (100, 90)))
+    GD(recon, data, [100, 1, 100], fidelity, reg, Radon, view,
+        gt=gt, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=2000,
+       thresh=1.5, angles=((20, 45), (100, 90)))
 
-    from Fourier_Transform import GaussFT, GaussFTVolume
-    gFT = GaussFT(ASpace)
-    dFT = GaussFT(PSpace)
-    FT = GaussFTVolume(ASpace, PSpace)
+#     from Fourier_Transform import GaussFT, GaussFTVolume
+#     gFT = GaussFT(ASpace)
+#     dFT = GaussFT(PSpace)
+#     FT = GaussFTVolume(ASpace, PSpace)
+#
+#     def vview(a): return view(gFT.inverse(a))
+#     GD(gFT(recon), dFT(data), [100, 1, 100], fidelity, reg, FT, vview,
+#        gt=gt, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=10,
+#        myderivs=FT.derivs, thresh=1.5, angles=((20, 45), (100, 90)))
 
-    def vview(a): return view(gFT.inverse(a))
-    GD(gFT(recon), dFT(data), [100, 1, 100], fidelity, reg, FT, vview,
-       gt=gt, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=10,
-       myderivs=FT.derivs, thresh=1.5, angles=((20, 45), (100, 90)))
-
-    print('GT RMSE = %f, data RMSE = %f' %
-          ((abs((gt - view(recon)).asarray())**2).sum() / gt.asarray().size, (abs((data - Radon(recon)).asarray())**2).sum() / data.asarray().size))
+    print('GT RMSE = %f, data RMSE = %f' % 
+          ((abs((gt - view(recon)).asarray()) ** 2).sum() / gt.asarray().size, (abs((data - Radon(recon)).asarray()) ** 2).sum() / data.asarray().size))
 
 #     savemat(join('store', 'polyII_recon'), {'view': view(recon).asarray(),
 #                                             'X': c.asarray(recon.x),
@@ -160,3 +160,46 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #                                                                      'X': c.asarray(recon.x),
 #                                                                      'R': c.asarray(recon.r),
 #                                                                      'I': c.asarray(recon.I), })
+
+exit()
+
+
+def r2V(r):
+    V = zeros((r.shape[0], 3, 3))
+    for i in range(3):
+        V[:, i, i] = r[:, i]
+    for i in range(2):
+        V[:, i, i + 1] = r[:, i + 3]
+    V[:, 0, 2] = r[:, 5]
+
+    V = matmul(V.transpose(0, 2, 1), V)
+    V = linalg.inv(V)
+
+    return V
+
+
+def getIPs(x, r):
+    n = x.shape[0]
+    V = r2V(r)
+    detV = linalg.det(V)
+    detV = sqrt(detV.reshape(1, n) * detV.reshape(n, 1))
+    sumV = V.reshape(1, n, 3, 3) + V.reshape(n, 1, 3, 3)
+    sumX = x.reshape(1, n, 3, 1) - x.reshape(n, 1, 3, 1)
+    IPs = exp(-.5 * (matmul(linalg.inv(sumV), sumX) * sumX).sum(axis=(2, 3)))
+    IPs *= sqrt(8 * detV / linalg.det(sumV))
+    return IPs
+
+
+recon = loadmat(join('store', 'polyII_recon'))
+recon = loadmat(join('store', 'Bipyramid_recon_200'))
+recon = AtomElement(ASpace, recon['X'], recon['R'], recon['I'])
+from numpy import zeros, matmul, linalg, exp
+from matplotlib import pyplot as plt
+IPs = getIPs(recon.x, recon.r)
+IPs[IPs > .999] = 0
+plt.imshow(IPs)
+plt.title('Orthogonality plot')
+plt.colorbar()
+plt.figure()
+plt.plot(IPs.sum(1))
+plt.show(block=True)
