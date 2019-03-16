@@ -3,7 +3,6 @@ Created on 28 Sep 2018
 
 @author: Rob Tovey
 '''
-from numba import cuda
 from .NewtonBases import __g, __Rg, __dRg
 from numba import cuda, float32 as f4, int32 as i4
 from math import exp as c_exp, sqrt as c_sqrt, floor
@@ -13,7 +12,7 @@ from numpy import empty, array
 DIM = 2
 
 
-@cuda.jit('f4(f4,f4[:],f4[:],f4[:])', device=True, inline=True, cache=True)
+@cuda.jit('f4(f4,f4[:],f4[:],f4[:])', device=True, inline=True)
 def __f(I, x, r, y):
     iso = (r.shape[0] == 1)
     Y, rY = cuda.local.array((DIM,), f4), cuda.local.array((DIM,), f4)
@@ -34,7 +33,7 @@ def __f(I, x, r, y):
     return I * __g(n)
 
 
-@cuda.jit('f4(f4,f4[:],f4[:],f4[:], f4[:])', device=True, inline=True, cache=True)
+@cuda.jit('f4(f4,f4[:],f4[:],f4[:], f4[:])', device=True, inline=True)
 def __Rf(I, x, r, y, T):
     Y, rY, rT, MY = cuda.local.array((DIM,), f4), cuda.local.array(
         (DIM,), f4), cuda.local.array((DIM,), f4), cuda.local.array((DIM,), f4)
@@ -71,7 +70,7 @@ def __Rf(I, x, r, y, T):
     return I * __Rg(m) * n
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True, cache=True)
+@cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True)
 def __dRf(I, x, r, y, T, R, dR, ddR, order):
     # __Rf = I*__Rg(|M(y-x)|^2)/|rT|
     Y, rY, rT, MY = cuda.local.array((DIM,), f4), cuda.local.array(
@@ -112,7 +111,7 @@ def __dRf(I, x, r, y, T, R, dR, ddR, order):
         for j in range(DIM):
             dMydT[i, j] = rT[i] * (IP * rT[j] - MY[j])
         dMydT[i, i] -= IP
-    dg, dJdy, dJdT = cuda.local.array((DIM,), f4), cuda.local.array(
+    dg, dJdy, dJdT = cuda.local.array((3,), f4), cuda.local.array(
         (DIM,), f4), cuda.local.array((DIM,), f4)
     __dRg(m, dg)
 
@@ -170,6 +169,7 @@ def __dRf(I, x, r, y, T, R, dR, ddR, order):
 
         # dI
         dR[0] = dg[0] * n
+        ddR[0, 0] = 0
         # dIdx
         # ddR[0, 1 + i] = - r_{j,i}dJdy[j]
         ddR[0, 1 + 0] = -r[0] * dJdy[0]
@@ -239,20 +239,20 @@ def __dRf(I, x, r, y, T, R, dR, ddR, order):
                     ddR[i, j] = ddR[j, i]
 
 
-@cuda.jit('void(f4,f4[:,:],i4,f4[:])', device=True, inline=True, cache=True)
+@cuda.jit('void(f4,f4[:,:],i4,f4[:])', device=True, inline=True)
 def __tovec(p0, w0, i, Y):
     Y[0] = p0 * w0[i, 0]
     Y[1] = p0 * w0[i, 1]
 
 
-def VolProj(atom, y0, y1, u):
-    grid = y0.shape[0], y1.shape[0]
+def VolProj(atom, y, u):
+    grid = y[0].size, y[1].size
     tpb = 4
     __VolProj[tuple(-(-g // tpb) for g in grid), (tpb, tpb)
-              ](atom.I, atom.x, __to_aniso(atom.r), y0, y1, u)
+              ](atom.I, atom.x, __to_aniso(atom.r), *y, u)
 
 
-@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:])', inline=True, cache=True)
+@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:])', inline=True)
 def __VolProj(I, x, r, y0, y1, u):
     jj, kk = cuda.grid(DIM)
     if jj >= y0.shape[0] or kk >= y1.shape[0]:
@@ -267,7 +267,7 @@ def __VolProj(I, x, r, y0, y1, u):
 
 
 def RadProj(atom, Rad, R):
-    S = Rad.ProjectionSpace
+    S = Rad.range
     t, w, p = S.orientations, S.ortho, S.detector
 
     grid = w[0].shape[0], p[0].shape[0]
@@ -276,7 +276,7 @@ def RadProj(atom, Rad, R):
               (tpb, tpb)](atom.I, atom.x, __to_aniso(atom.r), t, w[0], p[0], R)
 
 
-@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:,:])', inline=True, cache=True)
+@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:,:])', inline=True)
 def __RadProj(I, x, r, t, w0, p0, R):
     jj, k0 = cuda.grid(DIM)
     if jj >= t.shape[0] or k0 >= p0.shape[0]:
@@ -290,11 +290,11 @@ def __RadProj(I, x, r, t, w0, p0, R):
     R[jj, k0] = tmp
 
 
-def derivs_RadProj(atom, Rad, C, order=2):
-    S = Rad.ProjectionSpace
+def L2derivs_RadProj(atom, Rad, C, order=2):
+    S = Rad.range
     t, w, p = S.orientations, S.ortho, S.detector
-    if hasattr(C, 'array'):
-        C = C.array
+    if hasattr(C, 'asarray'):
+        C = C.asarray()
 
     block = w[0].shape[0]
     sz = [w[0].shape[0], p[0].shape[0],
@@ -307,15 +307,15 @@ def derivs_RadProj(atom, Rad, C, order=2):
     f, Df, DDf = empty((block,), dtype='f4'), empty(
         (6, block), dtype='f4'), empty((6, 6, block), dtype='f4')
 
-    __derivs_RadProj_aniso[block, THREADS](atom.I[0], atom.x[0], __to_aniso(atom.r)[0], t, w[0],
+    __L2derivs_RadProj_aniso[block, THREADS](atom.I[0], atom.x[0], __to_aniso(atom.r)[0], t, w[0],
                                            p[0], C, f, Df, DDf,
                                            array(sz, dtype='i4'), array(order, dtype='i4'))
 
     return f.sum(axis=-1), Df.sum(axis=-1), DDf.sum(axis=-1)
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:],f4[:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True, cache=True)
-def __derivs_RadProj_aniso(I, x, r, t, w0, p0, C, f, Df, DDf, sz, order):
+@cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:],f4[:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+def __L2derivs_RadProj_aniso(I, x, r, t, w0, p0, C, f, Df, DDf, sz, order):
     '''
     Computes the 0, 1 and 2 order derivatives of |R(I,x,r)-C|^2/2 for a single atom
     '''
@@ -351,9 +351,9 @@ def __derivs_RadProj_aniso(I, x, r, t, w0, p0, C, f, Df, DDf, sz, order):
             # Derivatives of |R-C|^2/2
             R[0] = R[0] - C[T, i0]
             F[0] += R[0] * R[0]
-            for j0 in range(10):
+            for j0 in range(6):
                 DF[j0] += R[0] * dR[j0]
-                for j1 in range(j0, 10):
+                for j1 in range(j0, 6):
                     DDF[j0, j1] += dR[j0] * dR[j1] + R[0] * ddR[j0, j1]
 
     F[0] *= 0.5
@@ -444,9 +444,9 @@ if __name__ == '__main__':
     s_dRf = [d.subs(subs) for d in s_dRf]
     s_ddRf = [[d.subs(subs) for d in dd] for dd in s_ddRf]
 
-    RF, dRF, ddRF = derivs_RadProj(
+    RF, dRF, ddRF = L2derivs_RadProj(
         dict2obj(I=I, x=x, r=r),
-        dict2obj(ProjectionSpace=dict2obj(orientations=T, ortho=[y],
+        dict2obj(range=dict2obj(orientations=T, ortho=[y],
                                           detector=[0 * y[0] + 1])),
         dict2obj(array=C))
 

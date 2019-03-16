@@ -10,15 +10,15 @@ where G(y,\theta) = exp(.5*J(y,\theta/|\theta|)^2-.5*|y|^2
 
 '''
 from numpy import sqrt, arange, random, maximum, minimum
-from code.bin.manager import context
+from GaussDictCode.bin.manager import context
 from GD_lib import _startup, norm, _step
 from numpy.linalg.linalg import solve, eigvalsh
 
 
-def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
+def linesearch(recon, data, max_iter, fidelity, reg, Radon, view=None,
                guess=None, tol=1e-4, min_iter=1, **kwargs):
     c, E, F, nAtoms, max_iter, plot = _startup(
-        recon, data, max_iter, view, guess, 1, **kwargs)
+        recon, data, max_iter, Radon, view, guess, 1, **kwargs)
     eps = 1e-4
     
     # Stepsizes
@@ -64,7 +64,13 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
                         ddf += reg.hess(recon[j])[0]
                     except TypeError:
                         ddf += reg.hess(recon[j])
-
+                        
+#                     print(df * 0.021875000558793545 ** 2, '\n')
+#                     print(ddf * 0.021875000558793545 ** 2)
+#                     print(df, '\n')
+#                     print(ddf)
+#                     exit()
+                    
                     H = 1 / h[j]
 #                     H = max(0, H - eigvalsh(ddf).min())
                     for i in range(ddf.shape[0]):
@@ -113,10 +119,10 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
     return recon, E[:jj], F[:jj]
 
 
-def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
+def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view=None,
                      guess=None, tol=1e-4, min_iter=1, **kwargs):
     c, E, F, nAtoms, max_iter, plot = _startup(
-        recon, data, max_iter, view, guess, 3, **kwargs)
+        recon, data, max_iter, Radon, view, guess, 3, **kwargs)
     eps = 1e-4
 
     # Stepsizes

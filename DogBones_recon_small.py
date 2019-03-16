@@ -5,11 +5,11 @@ Created on 10 Mar 2018
 '''
 from os.path import join
 from KL_GaussRadon import doKL_ProjGDStep_iso
-from code import standardGaussTomo
+from GaussDictCode import standardGaussTomo
 RECORD = join('store', 'DogBones_rand100_iso')
 RECORD = None
 from numpy import loadtxt, asarray, ascontiguousarray, pi
-from code.bin.manager import myManager
+from GaussDictCode.bin.manager import myManager
 from PIL import Image
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
@@ -40,7 +40,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     plt.show()
 #     exit()
 
-    Radon, view, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
+    Radon, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
         data=(data - data.min()) / 151786, dim=3, device='GPU', isotropic=False,
         vol_box=[-1, 1], vol_size=(data.shape[1], data.shape[1], data.shape[2]),
         angles=angles, det_box=[-1, 1],
@@ -65,7 +65,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     c.mul(recon.I, dsum / c.sum(Radon(recon).asarray()), recon.I)
     R = Radon(recon)
 
-#     view(recon).plot(plt, Sum=1)
+#     Radon.discretise(recon).plot(plt, Sum=1)
 #     plt.show(block=True)
 #     exit()
 
@@ -73,7 +73,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 
     guess = None
 
-    GD(recon, data, [100, 1, 100], fidelity, reg, Radon, view,
+    GD(recon, data, [100, 1, 100], fidelity, reg, Radon,
        thresh=.1, guess=guess, RECORD=RECORD)
 
 #     from Fourier_Transform import GaussFT, GaussFTVolume
@@ -81,7 +81,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     dFT = GaussFT(PSpace)
 #     FT = GaussFTVolume(ASpace, PSpace)
 #
-#     def vview(a): return view(gFT.inverse(a))
-#     GD(gFT(recon), dFT(data), [300, 1, 100], fidelity, reg, FT, vview,
+#     def vview(a): return Radon.discretise(gFT.inverse(a))
+#     GD(gFT(recon), dFT(data), [300, 1, 100], fidelity, reg, FT, view=vview,
 #        guess=guess, RECORD=RECORD, tol=1e-6, min_iter=10,
 #        myderivs=FT.derivs)

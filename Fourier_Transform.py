@@ -3,11 +3,11 @@ Created on 17 May 2018
 
 @author: Rob Tovey
 '''
-from code.dictionary_def import Dictionary, ProjSpace, AtomElement, VolSpace, AtomSpace, \
+from GaussDictCode.dictionary_def import DictionaryOp, ProjSpace, AtomElement, VolSpace, AtomSpace, \
     ProjElement, VolElement
 from numpy.fft import fftn, ifftn, fftfreq, fftshift, ifftshift
 from numpy import exp, pi, sqrt, arange, array, where, random
-from code.bin.manager import context
+from GaussDictCode.bin.manager import context
 
 
 class GaussFT(Dictionary):
@@ -64,11 +64,11 @@ If both input and output are the same then the grids must be equal.
 
         if self.inGrid is not None:
             if dim == 2:
-                from code.bin import FTGaussian2D
+                from GaussDictCode.bin import FTGaussian2D
                 self.__evalFT = FTGaussian2D.evaluate
                 self.__derivsFT = FTGaussian2D.derivs
             else:
-                from code.bin import FTGaussian3D
+                from GaussDictCode.bin import FTGaussian3D
                 self.__evalFT = FTGaussian3D.evaluate
                 self.__derivsFT = FTGaussian3D.derivs
 
@@ -84,10 +84,10 @@ If both input and output are the same then the grids must be equal.
                 return FT
         else:
             FT = self.__DFT(var, False)
-        if isinstance(self.ProjectionSpace, ProjSpace):
-            return ProjElement(self.ProjectionSpace, FT)
+        if isinstance(self.range, ProjSpace):
+            return ProjElement(self.range, FT)
         else:
-            return VolElement(self.ProjectionSpace, FT)
+            return VolElement(self.range, FT)
 
     def __inverse(self, var):
         if isinstance(var, AtomElement):
@@ -186,21 +186,21 @@ class GaussFTVolume(Dictionary):
 
         dim = ASpace.dim
         if dim == 2:
-            from code.bin.FTGaussian2D import evaluate, derivs
+            from GaussDictCode.bin.FTGaussian2D import evaluate, derivs
         else:
-            from code.bin.FTGaussian3D import evaluate, derivs
+            from GaussDictCode.bin.FTGaussian3D import evaluate, derivs
 
         self.__eval = evaluate
         self.__derivs = derivs
 
     def __call__(self, atoms):
-        return ProjElement(self.ProjectionSpace, self.__eval(atoms, self.__grid))
+        return ProjElement(self.range, self.__eval(atoms, self.__grid))
 
     def L2_derivs(self, atoms, C, order=2):
         # TODO: Update Fourier Transform
         raise NotImplementedError()
         f, df, ddf = self.__derivs(
-            atoms, self, C.array, order)
+            atoms, self, C.data, order)
         if order == 1:
             return f, df
         else:

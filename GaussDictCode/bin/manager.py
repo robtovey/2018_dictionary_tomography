@@ -5,7 +5,10 @@ Created on 27 Feb 2018
 '''
 import numpy as np
 from numba import cuda
-from numba.cuda.cudadrv.devicearray import DeviceNDArray as GPUArray
+try:
+    from numba.cuda.cudadrv.devicearray import DeviceNDArray as GPUArray
+except ImportError:
+    GPUArray = type(None)
 from .numba_cuda_aux import __GPU_reduce_flex_F as _GPU_reduce_flex_F, \
     __GPU_reduce_flex_C as _GPU_reduce_flex_C, __GPU_fill_C as _GPU_fill_C, \
     __GPU_fill_F as _GPU_fill_F, THREADS
@@ -28,6 +31,7 @@ context = __tmp()
 
 
 class myManager:
+
     def __init__(self, device='cpu', order='C', fType='float32', cType='complex64'):
         self.device = device.lower()
         self.order = order
@@ -44,20 +48,18 @@ class myManager:
         for i in range(4):
             for j in range(4):
                 exec(Func[0]
-                     + ('[i]' if not Scal[j][0] else '')
-                     + Sym[i] + Func[1]
-                     + ('[i]' if not Scal[j][1] else '') + Func[2]
+                     +('[i]' if not Scal[j][0] else '')
+                     +Sym[i] + Func[1]
+                     +('[i]' if not Scal[j][1] else '') + Func[2]
                      )
                 name = Sym[i] + str(Scal[j][0]) + str(Scal[j][1]) + 'f'
                 self.__funcs[name] = cuda.jit(
                     (Sig[0] + ('[:]' if not Scal[j][0] else '')
-                     + Sig[1] + ('[:]' if not Scal[j][1] else '') + Sig[2]).replace('T', fType),
-                    cache=True)(locals()['func'])
+                     +Sig[1] + ('[:]' if not Scal[j][1] else '') + Sig[2]).replace('T', fType))(locals()['func'])
                 name = Sym[i] + str(Scal[j][0]) + str(Scal[j][1]) + 'c'
                 self.__funcs[name] = cuda.jit(
                     (Sig[0] + ('[:]' if not Scal[j][0] else '')
-                     + Sig[1] + ('[:]' if not Scal[j][1] else '') + Sig[2]).replace('T', cType),
-                    cache=True)(locals()['func'])
+                     +Sig[1] + ('[:]' if not Scal[j][1] else '') + Sig[2]).replace('T', cType))(locals()['func'])
 
     def __enter__(self):
         context.append(self)

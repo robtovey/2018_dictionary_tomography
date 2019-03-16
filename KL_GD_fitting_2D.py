@@ -3,15 +3,15 @@ Created on 17 May 2018
 
 @author: Rob Tovey
 '''
-from code.transport_loss import l2_squared_loss, Transport_loss
+from GaussDictCode.transport_loss import l2_squared_loss, Transport_loss
 from KL_GaussRadon import doKL_LagrangeStep_iso, doKL_ProjGDStep_iso
 from GD_lib import linesearch as GD
 import odl
-from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
-from code.atomFuncs import GaussTomo, GaussVolume
+from GaussDictCode.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
+from GaussDictCode.atomFuncs import GaussTomo
 from numpy import sqrt, pi
-from code.bin.manager import myManager
-from code.regularisation import Joubert, null
+from GaussDictCode.bin.manager import myManager
+from GaussDictCode.regularisation import Joubert, null
 
 RECORD = 'multi_aniso_atoms_2D'
 RECORD = None
@@ -46,10 +46,9 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     recon[nAtoms - 1] = gt[nAtoms - 1]
     #####
     nAtoms = recon.I.shape[0]
-    Radon = GaussTomo(ASpace, PSpace, device=device)
-    view = GaussVolume(ASpace, vol, device=device)
+    Radon = GaussTomo(ASpace, vol, PSpace, device=device)
     data = Radon(gt)
-    gt_view = view(gt)
+    gt_view = Radon.discretise(gt)
     R = Radon(recon)
 
     # Reconstruction:
@@ -61,5 +60,5 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     def guess(d, a): return doKL_LagrangeStep_iso(d, a, 1e-3, Radon)
 #     def guess(d, a): return a
 
-    GD(recon, data, [100, 1], fidelity, reg, Radon, view,
+    GD(recon, data, [100, 1], fidelity, reg, Radon,
        gt=gt_view, dim='xrI', guess=guess, RECORD=RECORD)

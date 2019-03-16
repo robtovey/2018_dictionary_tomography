@@ -4,15 +4,15 @@ Created on 20 Feb 2018
 @author: Rob Tovey
 '''
 from KL_GaussRadon import doKL_ProjGDStep_iso
-from code import standardGaussTomo
+from GaussDictCode import standardGaussTomo
 RECORD = 'store/5_atoms_3D_OT_+I'
 RECORD = None
-from code.dictionary_def import AtomElement
+from GaussDictCode.dictionary_def import AtomElement
 from numpy import sqrt, pi
-from code.bin.manager import myManager
+from GaussDictCode.bin.manager import myManager
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
-    Radon, view, fidelity, _, ASpace, PSpace, params = standardGaussTomo(
+    Radon, fidelity, _, ASpace, PSpace, params = standardGaussTomo(
         dim=3, device='GPU', isotropic=False,
         angle_range=(0, pi), angle_num=50,
         vol_box=[-1, 1], vol_size=32, det_box=[-1.4, 1.4], det_size=64,
@@ -20,7 +20,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
         solver='Newton'
     )
     reg, GD = params
-    vol = view.ProjectionSpace
+    vol = Radon.embedding
 
     # Initiate Data:
     #####
@@ -38,7 +38,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     #####
     nAtoms = recon.r.shape[0]
     gt_sino = Radon(gt)
-    gt_view = view(gt)
+    gt_view = Radon.discretise(gt)
     R = Radon(recon)
 
 #     from matplotlib import pyplot as plt
@@ -48,7 +48,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #         plt.title(str(i))
 #         plt.pause(.1)
 #     exit()
-#     from code.atomFuncs import test_grad
+#     from GaussDictCode.atomFuncs import test_grad
 #     test_grad(ASpace, Radon, [10**-(k + 1) for k in range(6)])
 #     exit()
 #     gt_sino.plot(plt.subplot(121))
@@ -62,5 +62,5 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     def guess(d, a): return a
     guess = None
 
-    GD(recon, gt_sino, [100, 1, 1], fidelity, reg, Radon, view,
+    GD(recon, gt_sino, [100, 1, 1], fidelity, reg, Radon,
        gt=gt_view, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=30)

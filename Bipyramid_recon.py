@@ -5,11 +5,11 @@ Created on 29 Mar 2018
 '''
 from os.path import join
 from KL_GaussRadon import doKL_ProjGDStep_iso
-from code import standardGaussTomo
+from GaussDictCode import standardGaussTomo
 RECORD = join('store', 'Bipyramid_rand200_noise')
 RECORD = None
 from numpy import loadtxt, asarray, ascontiguousarray, pi, sqrt
-from code.bin.manager import myManager
+from GaussDictCode.bin.manager import myManager
 from PIL import Image
 from scipy.io import savemat, loadmat
 
@@ -97,7 +97,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     exit()
 
     if True:
-        Radon, view, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
+        Radon, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
             data=data / data.max(), dim=3, device='GPU', isotropic=False,
             vol_box=[-1, 1], vol_size=(data.shape[1], data.shape[1], data.shape[2]),
             angles=angles, det_box=[-1, 1],
@@ -114,15 +114,17 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
             c.set(tmp.x[:], c.mul(tmp.x, .5))
             c.set(tmp.I[:], 4 / n)
             return tmp
+
         nAtoms = 200
         recon = newAtoms(nAtoms, 1)
         #####
         R = Radon(recon)
 
         def guess(d, a): return doKL_ProjGDStep_iso(d, a, 1e-0, Radon)
+
         guess = None
 
-        GD(recon, data, [200, 1, 100], fidelity, reg, Radon, view,
+        GD(recon, data, [200, 1, 100], fidelity, reg, Radon,
            guess=guess, RECORD=RECORD, thresh=.07, angles=((-123, -40), (-164, -123)))
 
     #     from Fourier_Transform import GaussFT, GaussFTVolume
@@ -130,13 +132,13 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     #     dFT = GaussFT(PSpace)
     #     FT = GaussFTVolume(ASpace, PSpace)
     #
-    #     def vview(a): return view(gFT.inverse(a))
-    #     GD(gFT(recon), dFT(data), [200, 1, 100], fidelity, reg, FT, vview,
+    #     def vview(a): return Radon.discretise(gFT.inverse(a))
+    #     GD(gFT(recon), dFT(data), [200, 1, 100], fidelity, reg, FT, view=vview,
     #        guess=guess, RECORD=RECORD, tol=1e-6, min_iter=10,
     #        myderivs=FT.derivs)
 
         savemat(join('store', 'Bipyramid_recon_' + str(nAtoms)),
-                {'view': view(recon).asarray(),
+                {'view': Radon.discretise(recon).asarray(),
                  'X': c.asarray(recon.x),
                  'R': c.asarray(recon.r),
                  'I': c.asarray(recon.I), })
@@ -153,8 +155,8 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
         op_norm = 1.001 * odl.power_method_opnorm(params[2])
         niter = 500  # Number of iterations
         tau = 1 / op_norm  # Step size for the primal variable
-        sigma = 1 / (tau * op_norm**2)  # Step size for the dual variable
-        callback = (odl.solvers.CallbackPrintIteration(step=50) &
+        sigma = 1 / (tau * op_norm ** 2)  # Step size for the dual variable
+        callback = (odl.solvers.CallbackPrintIteration(step=50) & 
                     odl.solvers.CallbackShow(step=50))
         x = params[2].domain.zero()
         odl.solvers.pdhg(x, params[0], params[1], params[2], tau=tau, sigma=sigma, niter=niter,

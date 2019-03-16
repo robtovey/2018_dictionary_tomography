@@ -3,18 +3,18 @@ Created on 16 Apr 2018
 
 @author: Rob Tovey
 '''
-from code.transport_loss import l2_squared_loss, Transport_loss
+from GaussDictCode.transport_loss import l2_squared_loss, Transport_loss
 from KL_GaussRadon import doKL_LagrangeStep_iso, doKL_ProjGDStep_iso
 from GD_lib import linesearch as GD
 RECORD = 'multi_aniso_atoms_2D'
 RECORD = None
 import odl
-from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
-from code.atomFuncs import GaussTomo, GaussVolume
+from GaussDictCode.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
+from GaussDictCode.atomFuncs import GaussTomo
 from numpy import sqrt, pi, zeros, random, arange, log10
 from matplotlib import pyplot as plt, animation as mv
-from code.bin.manager import myManager
-from code.regularisation import Joubert, null
+from GaussDictCode.bin.manager import myManager
+from GaussDictCode.regularisation import Joubert, null
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
     # Space settings:
@@ -44,10 +44,9 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     c.set(gt.I[:], 1)
     #####
     nAtoms = recon.I.shape[0]
-    Radon = GaussTomo(ASpace, PSpace, device=device)
-    view = GaussVolume(ASpace, vol, device=device)
+    Radon = GaussTomo(ASpace, vol, PSpace, device=device)
     gt_sino = Radon(gt)
-    gt_view = view(gt)
+    gt_view = Radon.discretise(gt)
     R = Radon(recon)
 
     # Reconstruction:
@@ -86,7 +85,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
         ax[1, 0].clear()
         ax[1, 1].clear()
 
-        view(recon).plot(ax[0, 0])
+        Radon.discretise(recon).plot(ax[0, 0])
         ax[0, 0].set_title('Reconstruction')
         gt_view.plot(ax[0, 1])
         ax[0, 1].set_title('GT')

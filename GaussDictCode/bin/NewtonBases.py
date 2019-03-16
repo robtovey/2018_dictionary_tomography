@@ -37,7 +37,7 @@ __derivs_dRf = derivatives of |Rf-C|^2
 # Radial basis:
 
 
-@cuda.jit('f4(f4)', device=True, inline=True, cache=True)
+@cuda.jit('f4(f4)', device=True, inline=True)
 def __g(n):
     if n > 1:
         return 0
@@ -45,7 +45,7 @@ def __g(n):
         return c_exp(-30 * n) * c_sqrt(30 / pi)
 
 
-@cuda.jit('f4(f4)', device=True, inline=True, cache=True)
+@cuda.jit('f4(f4)', device=True, inline=True)
 def __Rg(n):
     # int exp(-(x^2+n)/2)/sqrt(2pi) dx = exp(-n/2)
     if n > 1:
@@ -54,7 +54,7 @@ def __Rg(n):
         return c_exp(-30 * n)
 
 
-@cuda.jit('void(f4,f4[:])', device=True, inline=True, cache=True)
+@cuda.jit('void(f4,f4[:])', device=True, inline=True)
 def __dRg(n, dg):
     # R = exp(-n/2)
     # dR = -R/2, ddR = R/4
@@ -67,7 +67,7 @@ def __dRg(n, dg):
         dg[1] = -30 * dg[0]
         dg[2] = 900 * dg[0]
 
-# @cuda.jit('f4(f4)', device=True, inline=True, cache=True)
+# @cuda.jit('f4(f4)', device=True, inline=True)
 # def __g(n):
 #     # sum(a*sqrt(g/pi)*exp(-gn)) -> sum(a*exp(-g*n))
 #     if n > 1:
@@ -100,7 +100,7 @@ def __dRg(n, dg):
 #         return v
 #
 #
-# @cuda.jit('f4(f4)', device=True, inline=True, cache=True)
+# @cuda.jit('f4(f4)', device=True, inline=True)
 # def __Rg(n):
 #     # int exp(-(x^2+n)/2)/sqrt(2pi) dx = exp(-n/2)
 #     # sum(a*sqrt(g/pi)*exp(-gn)) -> sum(a*exp(-g*n))
@@ -134,7 +134,7 @@ def __dRg(n, dg):
 #         return v
 #
 #
-# @cuda.jit('void(f4,f4[:])', device=True, inline=True, cache=True)
+# @cuda.jit('void(f4,f4[:])', device=True, inline=True)
 # def __dRg(n, dg):
 #     # sum(a*sqrt(g/pi)*exp(-gn)) -> sum(a*exp(-g*n))
 #     dg[0] = 0
@@ -198,7 +198,7 @@ def __dRg(n, dg):
 #         AexpG *= g
 #         dg[2] += AexpG.real
 
-# @cuda.jit('f4(f4)', device=True, inline=True, cache=True)
+# @cuda.jit('f4(f4)', device=True, inline=True)
 # def __g(n):
 #     if n >= 1:
 #         return 0
@@ -207,7 +207,7 @@ def __dRg(n, dg):
 #         return tmp * tmp * (15 / 16)
 #
 #
-# @cuda.jit('f4(f4)', device=True, inline=True, cache=True)
+# @cuda.jit('f4(f4)', device=True, inline=True)
 # def __Rg(n):
 #     if n >= 1:
 #         return 0
@@ -215,7 +215,7 @@ def __dRg(n, dg):
 #         return (1 - n) ** 3.5
 #
 #
-# @cuda.jit('void(f4,f4[:])', device=True, inline=True, cache=True)
+# @cuda.jit('void(f4,f4[:])', device=True, inline=True)
 # def __dRg(n, dg):
 #     if n >= 1:
 #         dg[0] = 0
@@ -231,7 +231,7 @@ def __dRg(n, dg):
 #         dg[0] = tmp0 * tmp1
 
 
-@cuda.jit('f4(f4,f4[:],f4[:],f4[:])', device=True, inline=True, cache=True)
+@cuda.jit('f4(f4,f4[:],f4[:],f4[:])', device=True, inline=True)
 def __f(I, x, r, y):
     iso = (r.shape[0] == 1)
     Y, rY = cuda.local.array((DIM,), f4), cuda.local.array((DIM,), f4)
@@ -253,7 +253,7 @@ def __f(I, x, r, y):
     return I * __g(n)
 
 
-@cuda.jit('f4(f4,f4[:],f4[:],f4[:], f4[:])', device=True, inline=True, cache=True)
+@cuda.jit('f4(f4,f4[:],f4[:],f4[:], f4[:])', device=True, inline=True)
 def __Rf(I, x, r, y, T):
     Y, rY, rT, MY = cuda.local.array((DIM,), f4), cuda.local.array(
         (DIM,), f4), cuda.local.array((DIM,), f4), cuda.local.array((DIM,), f4)
@@ -305,7 +305,7 @@ def __Rf(I, x, r, y, T):
     return I * __Rg(m) * n
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True, cache=True)
+@cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True)
 def __dRf_aniso(I, x, r, y, tt, R, dR, ddR, order):
     # __Rf = I*__Rg(|M(y-x)|^2)/|rT|
     Y, rY, rT, MY = cuda.local.array((DIM,), f4), cuda.local.array(
@@ -362,7 +362,7 @@ def __dRf_aniso(I, x, r, y, tt, R, dR, ddR, order):
         for j in range(DIM):
             dMydT[i, j] = rT[i] * (IP * rT[j] - MY[j])
         dMydT[i, i] -= IP
-    dg, dJdy, dJdT = cuda.local.array((DIM,), f4), cuda.local.array(
+    dg, dJdy, dJdT = cuda.local.array((3,), f4), cuda.local.array(
         (DIM,), f4), cuda.local.array((DIM,), f4)
     __dRg(m, dg)
 
@@ -420,6 +420,7 @@ def __dRf_aniso(I, x, r, y, tt, R, dR, ddR, order):
 
         # dI
         dR[0] = dg[0] * n
+        ddR[0, 0] = 0
         # dIdx
         # ddR[0, 1 + i] = - r_{j,i}dJdy[j]
         ddR[0, 1 + 0] = -r[0] * dJdy[0]
@@ -520,7 +521,7 @@ def __dRf_aniso(I, x, r, y, tt, R, dR, ddR, order):
                     ddR[i, j] = ddR[j, i]
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True, cache=True)
+@cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True)
 def __dRf_iso(I, x, r, y, tt, R, dR, ddR, order):
     # __Rf = I*__Rg(|M(y-x)|^2)/|rT|
     Y, rY, MY = cuda.local.array((DIM,), f4), cuda.local.array(
@@ -617,6 +618,7 @@ def __dRf_iso(I, x, r, y, tt, R, dR, ddR, order):
 
         # dI
         dR[0] = dg[0] * n
+        ddR[0, 0] = 0
         # dIdx
         # ddR[0, 1 + i] = - r_{j,i}dJdy[j]
         ddR[0, 1 + 0] = -r[0] * dJdy[0]
@@ -663,28 +665,28 @@ def __dRf_iso(I, x, r, y, tt, R, dR, ddR, order):
                     ddR[i, j] = ddR[j, i]
 
 
-@cuda.jit('void(f4,f4,f4[:,:],f4[:,:],i4,f4[:])', device=True, inline=True, cache=True)
+@cuda.jit('void(f4,f4,f4[:,:],f4[:,:],i4,f4[:])', device=True, inline=True)
 def __tovec3D(p0, p1, w0, w1, i, Y):
     Y[0] = p0 * w0[i, 0] + p1 * w1[i, 0]
     Y[1] = p0 * w0[i, 1] + p1 * w1[i, 1]
     Y[2] = p0 * w0[i, 2] + p1 * w1[i, 2]
 
 
-@cuda.jit('void(f4,f4,f4[:,:],f4[:,:],i4,f4[:])', device=True, inline=True, cache=True)
+@cuda.jit('void(f4,f4,f4[:,:],f4[:,:],i4,f4[:])', device=True, inline=True)
 def __tovec2p5D(p0, p1, w0, w1, i, Y):
     Y[0] = p0 * w0[i, 0]
     Y[1] = p0 * w0[i, 1]
     Y[2] = p1
 
 
-def VolProj(atom, y0, y1, y2, u):
-    grid = y0.shape[0], y1.shape[0], y2.shape[0]
+def VolProj(atom, y, u):
+    grid = y[0].size, y[1].size, y[2].size
     tpb = 4
     __VolProj[tuple(-(-g // tpb) for g in grid), (tpb, tpb, tpb)
-              ](atom.I, atom.x, atom.r, y0, y1, y2, u)
+              ](atom.I, atom.x, atom.r, *y, u)
 
 
-@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:],f4[:,:,:])', inline=True, cache=True)
+@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:],f4[:,:,:])', inline=True)
 def __VolProj(I, x, r, y0, y1, y2, u):
     jj, kk, ll = cuda.grid(DIM)
     if jj >= y0.shape[0] or kk >= y1.shape[0] or ll >= y2.shape[0]:
@@ -700,7 +702,7 @@ def __VolProj(I, x, r, y0, y1, y2, u):
 
 
 def RadProj(atom, Rad, R):
-    S = Rad.ProjectionSpace
+    S = Rad.range
     t, w, p = S.orientations, S.ortho, S.detector
 
     grid = w[0].shape[0], p[0].shape[0], p[1].shape[0]
@@ -714,7 +716,7 @@ def RadProj(atom, Rad, R):
                      (tpb, tpb, tpb)](atom.I, atom.x, atom.r, t, w[0], w[1], p[0], p[1], R)
 
 
-@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])', inline=True, cache=True)
+@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])', inline=True)
 def __RadProj_3D(I, x, r, t, w0, w1, p0, p1, R):
     jj, k0, k1 = cuda.grid(DIM)
     if jj >= t.shape[0] or k0 >= p0.shape[0] or k1 >= p1.shape[0]:
@@ -728,7 +730,7 @@ def __RadProj_3D(I, x, r, t, w0, w1, p0, p1, R):
     R[jj, k0, k1] = tmp
 
 
-@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])', inline=True, cache=True)
+@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])', inline=True)
 def __RadProj_2p5D(I, x, r, t, w0, w1, p0, p1, R):
     jj, k0, k1 = cuda.grid(DIM)
     if jj >= t.shape[0] or k0 >= p0.shape[0] or k1 >= p1.shape[0]:
@@ -742,11 +744,11 @@ def __RadProj_2p5D(I, x, r, t, w0, w1, p0, p1, R):
     R[jj, k0, k1] = tmp
 
 
-def derivs_RadProj(atom, Rad, C, order=2):
-    S = Rad.ProjectionSpace
+def L2derivs_RadProj(atom, Rad, C, order=2):
+    S = Rad.range
     t, w, p = S.orientations, S.ortho, S.detector
-    if hasattr(C, 'array'):
-        C = C.array
+    if hasattr(C, 'asarray'):
+        C = C.asarray()
     iso = (atom.r.shape[1] == 1)
 
     block = w[0].shape[0]
@@ -766,17 +768,17 @@ def derivs_RadProj(atom, Rad, C, order=2):
         w = (w[0], empty((1, 1), dtype='f4'))
 
     if iso:
-        __derivs_RadProj_iso_3D[block, THREADS](atom.I[0], atom.x[0], atom.r[0], t, w[0], w[1],
+        __L2derivs_RadProj_iso_3D[block, THREADS](atom.I[0], atom.x[0], atom.r[0], t, w[0], w[1],
                                                 p[0], p[1], C, f, Df, DDf, array(sz, dtype='i4'), array(order, dtype='i4'))
     else:
-        __derivs_RadProj_aniso_3D[block, THREADS](atom.I[0], atom.x[0], atom.r[0], t, w[0], w[1],
+        __L2derivs_RadProj_aniso_3D[block, THREADS](atom.I[0], atom.x[0], atom.r[0], t, w[0], w[1],
                                                   p[0], p[1], C, f, Df, DDf, array(sz, dtype='i4'), array(order, dtype='i4'))
 
     return f.sum(axis=-1), Df.sum(axis=-1), DDf.sum(axis=-1)
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True, cache=True)
-def __derivs_RadProj_aniso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, order):
+@cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+def __L2derivs_RadProj_aniso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, order):
     '''
     Computes the 0, 1 and 2 order derivatives of |R(I,x,r)-C|^2/2 for a single atom
     '''
@@ -855,8 +857,8 @@ def __derivs_RadProj_aniso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, ord
             i += 1
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True, cache=True)
-def __derivs_RadProj_iso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, order):
+@cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+def __L2derivs_RadProj_iso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, order):
     '''
     Computes the 0, 1 and 2 order derivatives of |R(I,x,r)-C|^2/2 for a single atom
     '''
@@ -984,14 +986,14 @@ if __name__ == '__main__':
     s_dRf = [d.subs(subs) for d in s_dRf]
     s_ddRf = [[d.subs(subs) for d in dd] for dd in s_ddRf]
 
-    RF, dRF, ddRF = derivs_RadProj(
+    RF, dRF, ddRF = L2derivs_RadProj(
         dict2obj(I=I, x=x, r=r),
-        dict2obj(ProjectionSpace=dict2obj(orientations=T, ortho=[
+        dict2obj(range=dict2obj(orientations=T, ortho=[
                  y, 0 * y], detector=[0 * y[0] + 1, 0 * y[0]])),
         dict2obj(array=C))
-#     RF, dRF, ddRF = derivs_RadProj(
+#     RF, dRF, ddRF = L2derivs_RadProj(
 #         dict2obj(I=I, x=x, r=r),
-#         dict2obj(ProjectionSpace=dict2obj(orientations=T[:, :2], ortho=[
+#         dict2obj(range=dict2obj(orientations=T[:, :2], ortho=[
 #                  y[:, :2]], detector=[array([1], dtype='f4'), array([y[0, 2]], dtype='f4')])),
 #         dict2obj(array=C))
 

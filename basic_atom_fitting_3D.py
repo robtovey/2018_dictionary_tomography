@@ -3,16 +3,16 @@ Created on 8 Jan 2018
 
 @author: Rob Tovey
 '''
-from code import standardGaussTomo
+from GaussDictCode import standardGaussTomo
 RECORD = 'store/2_atoms_3D_L2'
 RECORD = None
 import odl
-from code.dictionary_def import AtomElement
+from GaussDictCode.dictionary_def import AtomElement
 from numpy import sqrt, pi
-from code.bin.manager import myManager
+from GaussDictCode.bin.manager import myManager
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
-    Radon, view, fidelity, _, ASpace, PSpace, params = standardGaussTomo(
+    Radon, fidelity, _, ASpace, PSpace, params = standardGaussTomo(
         dim=3, device='GPU', isotropic=False,
         angle_range=([0] * 2, [pi, pi / 2]), angle_num=[20, 1],
         vol_box=[-1, 1], vol_size=32, det_box=[-1.4, 1.4], det_size=32,
@@ -20,7 +20,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
         solver='Newton'
     )
     reg, GD = params
-    vol = view.ProjectionSpace
+    vol = Radon.embedding
 
     # Initiate Data:
     #####
@@ -37,10 +37,10 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     #####
     nAtoms = gt.r.shape[0]
     gt_sino = Radon(gt)
-    gt_view = view(gt)
+    gt_view = Radon.discretise(gt)
     R = Radon(recon)
 
-#     from code.atomFuncs import test_grad
+#     from GaussDictCode.atomFuncs import test_grad
 #     test_grad(ASpace, Radon, [10**-(k + 1) for k in range(6)])
 #     exit()
 
@@ -48,5 +48,5 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     def guess(d, a): return doKL_LagrangeStep_2Diso(d, a, 1e-3, Radon)
 #     def guess(d, a): return a
 
-    GD(recon, gt_sino, [100, 1], fidelity, reg, Radon, view,
+    GD(recon, gt_sino, [100, 1], fidelity, reg, Radon,
        gt=gt_view, guess=None, RECORD=RECORD)

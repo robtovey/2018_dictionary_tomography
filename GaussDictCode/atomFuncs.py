@@ -6,8 +6,8 @@ Created on 4 Jan 2018
 import numpy as np
 from numpy import cos, sqrt, empty, sin
 import numba
-from code.dictionary_def import Dictionary, Element
-from code.bin.manager import context
+from GaussDictCode.dictionary_def import DictionaryOp
+from GaussDictCode.bin.manager import context
 
 
 def theta_to_vec(theta):
@@ -74,7 +74,7 @@ def perp(theta):
         return ortho0, ortho1
 
 
-class GaussTomo(Dictionary):
+class GaussTomo(DictionaryOp):
     '''
 An atom is going to be defined by a position x = [x1,x2,...] and radius,
 r such that density is:
@@ -88,60 +88,63 @@ We make a slight assumption that $p$ is already given in standard ortho
 basis so it is 1 codim and can be factored out of the projection. 
     '''
 
-    def __init__(self, ASpace, VSpace, device='GPU'):
-        Dictionary.__init__(self, ASpace, VSpace, isLinear=True)
+    def __init__(self, Atoms, Volume, Sino, device='GPU'):
+        DictionaryOp.__init__(self, Atoms, Volume, Sino, linear=False)
         self.__device = device.lower()
         
         if self.__device == 'cpu':
             raise ValueError('CPU processing not yet supported')
 
-        if self.ElementSpace.dim == 2:
-            import code.bin.NewtonBases2D as myRad
-        elif self.ElementSpace.dim == 3:
-            import code.bin.NewtonBases as myRad
-
-        self.__fwrd = myRad.RadProj
-        self.__derivs = myRad.derivs_RadProj
+        self.__fwrd, self.__derivs, self.__proj = self._getOps(Atoms.dim)
 
         c = context()
-        self.__params = ((c.copy(VSpace.orientations),)
-                         +tuple(c.copy(x) for x in VSpace.ortho)
-                         +tuple(c.copy(x) for x in VSpace.detector))
+#         self.__params = (c.copy(Sino.orientations),
+#                          tuple(c.copy(x) for x in Sino.ortho),
+#                          tuple(c.copy(x) for x in Sino.detector))
+        self.__vol = tuple(c.cast(x) for x in self.embedding.coord_vectors)
+        
+    def _getOps(self, dim):
+        if dim == 2:
+            import GaussDictCode.bin.NewtonBases2D as myRad
+        elif dim == 3:
+            import GaussDictCode.bin.NewtonBases as myRad
+        else:
+            raise ValueError
+        return myRad.RadProj, myRad.L2derivs_RadProj, myRad.VolProj
 
-    def __call__(self, atoms):
-        R = self.ProjectionSpace.null()
-        self.__fwrd(atoms, self, R.array)
-        return R
+    def __call__(self, atoms, out=None):
+        if out is None:
+            out = self.range.element(context().empty(self.range.shape))
+        self.__fwrd(atoms, self, out.data)
+        return out
+    
+    def discretise(self, atoms, out=None):
+        if out is None:
+            out = self.embedding.element(context().empty(self.embedding.shape))
+        self.__proj(atoms, self.__vol, out.data)
+        return out
 
     def L2_derivs(self, atoms, C, order=2):
         f, df, ddf = self.__derivs(
-            atoms, self, C.array, order)
+            atoms, self, C.data, order)
         if order == 1:
             return f, df
         else:
             return f, df, ddf
 
 
-class GaussVolume(Dictionary):
+class SingleParticleGaussTomo(GaussTomo):
+    '''
+Equivalent to the GaussTomo operator but uses a point 
+spread function and multi-core distrubution is aimed
+at many low resolution images.
+    '''
 
-    def __init__(self, ASpace, VSpace, device='GPU'):
-        Dictionary.__init__(self, ASpace, VSpace, isLinear=True)
-        self.__device = device.lower()
-
-        if self.__device == 'cpu':
-            raise ValueError('CPU processing not yet supported')
-
-        if self.ElementSpace.dim == 2:
-            import code.bin.NewtonBases2D as myRad
-        elif self.ElementSpace.dim == 3:
-            import code.bin.NewtonBases as myRad
-
-        self.__proj = myRad.VolProj
-
-    def __call__(self, atoms):
-        u = self.ProjectionSpace.zero()
-        self.__proj(atoms, *self.ProjectionSpace.grid, u.asarray())
-        return u
+    def _getOps(self, dim):
+        if dim not in (2, 3):
+            raise ValueError
+        import GaussDictCode.bin.point_spread_functions as myRad
+        return myRad.RadProj, myRad.L2derivs_RadProj, myRad.VolProj
 
 
 def test_grad(space, Radon, eps, axis=None):
@@ -157,7 +160,7 @@ def test_grad(space, Radon, eps, axis=None):
     c = context()
 
     def norm2(x):
-        return c.sum(c.mul(x.array, x.array)) / 2
+        return c.sum(c.mul(x.data, x.data)) / 2
 
     n = norm2(R)
 
@@ -195,7 +198,7 @@ def test_grad(space, Radon, eps, axis=None):
 if __name__ == '__main__':
     from numpy import pi
     import odl
-    from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, ProjElement
+    from GaussDictCode.dictionary_def import VolSpace, ProjSpace, AtomSpace, ProjElement
     from matplotlib import pyplot as plt
 
 #     # 2D comparison
@@ -204,15 +207,14 @@ if __name__ == '__main__':
     angles = odl.uniform_partition(0, 2 * pi, 360, nodes_on_bdry=True)
     detector = odl.uniform_partition(-1, 1, 256)
     vol = odl.uniform_partition([-1] * 2, [1] * 2, [128] * 2)
-    view = GaussVolume(ASpace, VolSpace(vol), 'GPU')
     myPSpace = ProjSpace(angles, detector)
-    myTomo = GaussTomo(ASpace, myPSpace, device='GPU')
+    myTomo = GaussTomo(ASpace, VolSpace(vol), myPSpace, device='GPU')
     mySino = myTomo(atoms)
     odlPSpace = odl.tomo.Parallel2dGeometry(angles, detector)
     odlTomo = odl.tomo.RayTransform(
         odl.uniform_discr_frompartition(vol), odlPSpace)
-    odlSino = odlTomo(view(atoms).asarray())
-    odlSino = ProjElement(myPSpace, odlSino.__array__())
+    odlSino = odlTomo(myTomo.discretise(atoms).asarray())
+    odlSino = ProjElement(myPSpace, odlSino.asarray())
 
     mySino.plot(plt.subplot('211'), aspect='auto')
     plt.title('2D Atomic Sinogram (top) and volume-sinogram (bottom)')
@@ -221,22 +223,19 @@ if __name__ == '__main__':
 #     # 2.5D comparison
     ASpace = AtomSpace(3, isotropic=False)
     atoms = ASpace.random(3, seed=2)
-    atoms.x[:, :] = np.array([0, 0, .8])
     atoms.I[:] = 1
-    atoms.r[:, :3] = 7
-    atoms.r[:, 3:] = 0
+    atoms.r[:, :3], atoms.r[:, 3:] = 7, 0
     angles = odl.uniform_partition(0, pi, 4, nodes_on_bdry=True)
     detector = odl.uniform_partition([-1] * 2, [1] * 2, [128] * 2)
     vol = odl.uniform_partition([-1] * 3, [1] * 3, [256] * 3)
-    view = GaussVolume(ASpace, VolSpace(vol), 'GPU')
     myPSpace = ProjSpace(angles, detector)
-    myTomo = GaussTomo(ASpace, myPSpace, device='GPU')
+    myTomo = GaussTomo(ASpace, VolSpace(vol), myPSpace, device='GPU')
     mySino = myTomo(atoms)
     odlPSpace = odl.tomo.Parallel3dAxisGeometry(angles, detector)
     odlTomo = odl.tomo.RayTransform(
         odl.uniform_discr_frompartition(vol), odlPSpace)
-    odlSino = odlTomo(view(atoms).asarray())
-    odlSino = ProjElement(myPSpace, odlSino.__array__())
+    odlSino = odlTomo(myTomo.discretise(atoms).asarray())
+    odlSino = ProjElement(myPSpace, odlSino.asarray())
 
     plt.figure()
     mySino.plot(plt.subplot('211'), aspect='auto')
@@ -254,14 +253,13 @@ if __name__ == '__main__':
         [0, 0], [pi, pi], [3, 3], nodes_on_bdry=False)
     detector = odl.uniform_partition([-1] * 2, [1] * 2, [128] * 2)
     vol = odl.uniform_partition([-1] * 3, [1] * 3, [256] * 3)
-    view = GaussVolume(ASpace, VolSpace(vol), 'GPU')
     myPSpace = ProjSpace(angles, detector)
-    myTomo = GaussTomo(ASpace, myPSpace, device='GPU')
+    myTomo = GaussTomo(ASpace, VolSpace(vol), myPSpace, device='GPU')
     mySino = myTomo(atoms)
     odlPSpace = odl.tomo.Parallel3dEulerGeometry(angles, detector)
     odlTomo = odl.tomo.RayTransform(
         odl.uniform_discr_frompartition(vol), odlPSpace)
-    odlSino = odlTomo(view(atoms).asarray())
+    odlSino = odlTomo(myTomo.discretise(atoms).asarray())
     odlSino = ProjElement(myPSpace, odlSino.__array__().reshape(-1, 128, 128))
 
     plt.figure()

@@ -9,10 +9,9 @@ from numba import cuda
 # from pyculib import fft as cu_fft
 from numpy import empty, zeros, array, exp, log, maximum, arange
 from numpy.fft import fftshift, irfft2, rfft2
-from code.dictionary_def import Element
-from code.bin.numba_cuda_aux import __GPU_reduce_2, __GPU_fill2, \
+from GaussDictCode.bin.numba_cuda_aux import __GPU_reduce_2, __GPU_fill2, \
     __GPU_mult2_Cconj, __GPU_mult2_C, THREADS, __GPU_fill2_C, __GPU_sum2_C2R
-from code.bin.manager import context
+from GaussDictCode.bin.manager import context
 ################
 # Earth movers
 ################
@@ -533,10 +532,10 @@ class Transport_loss(Fidelity):
             self.__earth_mover_grad = tmp2
 
     def __call__(self, x, y):
-        if isinstance(x, Element):
-            x = x.array
-        if isinstance(y, Element):
-            y = y.array
+        if hasattr(x, 'asarray'):
+            x = x.asarray()
+        if hasattr(y, 'asarray'):
+            y = y.asarray()
         d = empty(x.shape[:self.dim - 1], dtype=x.dtype)
 
         c = context()
@@ -550,10 +549,10 @@ class Transport_loss(Fidelity):
         return d.sum()
 
     def grad(self, x, y, axis=0):
-        if isinstance(x, Element):
-            x = x.array
-        if isinstance(y, Element):
-            y = y.array
+        if hasattr(x, 'asarray'):
+            x = x.asarray()
+        if hasattr(y, 'asarray'):
+            y = y.asarray()
         d = empty(x.shape, dtype=x.dtype)
 
         if axis == 1:
@@ -568,10 +567,10 @@ class Transport_loss(Fidelity):
 class l2_squared_loss(Fidelity):
 
     def __call__(self, x, y):
-        if isinstance(x, Element):
-            x = x.array
-        if isinstance(y, Element):
-            y = y.array
+        if hasattr(x, 'asarray'):
+            x = x.asarray()
+        if hasattr(y, 'asarray'):
+            y = y.asarray()
 
         # d = (x - y)**2
         c = context()
@@ -586,10 +585,10 @@ class l2_squared_loss(Fidelity):
         return c.sum(d) / 2
 
     def grad(self, x, y, axis=0):
-        if isinstance(x, Element):
-            x = x.array
-        if isinstance(y, Element):
-            y = y.array
+        if hasattr(x, 'asarray'):
+            x = x.asarray()
+        if hasattr(y, 'asarray'):
+            y = y.asarray()
 
         # d = x - y
         c = context()

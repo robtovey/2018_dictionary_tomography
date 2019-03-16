@@ -9,12 +9,12 @@ RECORD = None
 from odl.contrib import mrc
 import odl
 from numpy import linspace, pi, ascontiguousarray
-from code.bin.manager import myManager
-from code.dictionary_def import AtomSpace, VolSpace, ProjSpace, VolElement, \
+from GaussDictCode.bin.manager import myManager
+from GaussDictCode.dictionary_def import AtomSpace, VolSpace, ProjSpace, VolElement, \
     ProjElement
-from code.atomFuncs import GaussTomo, GaussVolume
-from code.transport_loss import l2_squared_loss
-from code.regularisation import null
+from GaussDictCode.atomFuncs import GaussTomo
+from GaussDictCode.transport_loss import l2_squared_loss
+from GaussDictCode.regularisation import null
 from KL_GaussRadon import doKL_ProjGDStep_iso
 
 with mrc.FileReaderMRC(join('store', 'jasenko_1p8A_nonsharpened_absscale.mrc')) as f:
@@ -55,8 +55,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     c.set(recon.r, 10, (slice(None), slice(None, 3)))
     c.set(recon.r, 0, (slice(None), slice(3, None)))
     nAtoms = recon.I.shape[0]
-    Radon = GaussTomo(ASpace, PSpace, device=device)
-    view = GaussVolume(ASpace, vol, device=device)
+    Radon = GaussTomo(ASpace, vol, PSpace, device=device)
     gt = VolElement(vol, gt)
     R = Radon(recon)
     data = ProjElement(PSpace, data.asarray().reshape(PSpace.shape))
@@ -70,5 +69,5 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     guess = None
 
     from NewtonGaussian import linesearch as GD
-    GD(recon, data, [100, 1, 100], fidelity, reg, Radon, view,
+    GD(recon, data, [100, 1, 100], fidelity, reg, Radon,
        gt=gt, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=10)

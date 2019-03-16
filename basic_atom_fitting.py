@@ -3,15 +3,15 @@ Created on 5 Jan 2018
 
 @author: Rob Tovey
 '''
-from code.bin.manager import myManager
-from code import standardGaussTomo
+from GaussDictCode.bin.manager import myManager
+from GaussDictCode import standardGaussTomo
 RECORD = '2_atoms_2D_OT'
 RECORD = None
-from code.dictionary_def import AtomElement
+from GaussDictCode.dictionary_def import AtomElement
 from numpy import sqrt, pi
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
-    Radon, view, fidelity, _, ASpace, PSpace, params = standardGaussTomo(
+    Radon, fidelity, _, ASpace, PSpace, params = standardGaussTomo(
         dim=2, device='GPU', isotropic=False,
         angle_range=(0, pi), angle_num=30,
         vol_box=[-1, 1], vol_size=64, det_box=[-1.4, 1.4], det_size=128,
@@ -19,7 +19,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
         solver='Newton'
     )
     reg, GD = params
-    vol = view.ProjectionSpace
+    vol = Radon.embedding
 
     # Initiate Data:
     #####
@@ -34,12 +34,12 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     #####
     nAtoms = len(gt.r)
     gt_sino = Radon(gt)
-    gt_view = view(gt)
+    gt_view = Radon.discretise(gt)
     R = Radon(recon)
 
     # from atomFuncs import test_grad
     # test_grad(ASpace, Radon, [10**-(k + 0) for k in range(6)])
     # exit()
 
-    GD(recon, gt_sino, [100, 1], fidelity, reg, Radon, view,
+    GD(recon, gt_sino, [100, 1], fidelity, reg, Radon,
        gt=gt_view, guess=None, RECORD=RECORD, tol=1e-4, min_iter=20)

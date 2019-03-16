@@ -7,7 +7,7 @@ from os.path import join
 import odl
 from odl.contrib import mrc
 from numpy import ascontiguousarray, pi, pad, sqrt
-from code import standardGaussTomo
+from GaussDictCode import standardGaussTomo
 from scipy.io import savemat, loadmat
 
 # Import data:
@@ -35,7 +35,6 @@ vol = list(gt.shape)
 # plt.title('TV recon, view from orientation: ' + str((100, 90)))
 # plt.show()
 # exit()
-
 
 Radon, _, fidelity, data, vol, PSpace, params = standardGaussTomo(
     gt=gt, dim=3, solver='odl', fidelity='l2_squared', reg=['TV', 3e-6],
@@ -65,8 +64,8 @@ op_norm = 1.001 * odl.power_method_opnorm(params[2])
 print('Op norm = ', op_norm)
 niter = 500  # Number of iterations
 tau = 1 / op_norm  # Step size for the primal variable
-sigma = 1 / (tau * op_norm**2)  # Step size for the dual variable
-callback = (odl.solvers.CallbackPrintIteration(step=50) &
+sigma = 1 / (tau * op_norm ** 2)  # Step size for the dual variable
+callback = (odl.solvers.CallbackPrintIteration(step=50) & 
             odl.solvers.CallbackShow(step=50))
 x = params[2].domain.zero()
 odl.solvers.pdhg(x, params[0], params[1], params[2], tau=tau, sigma=sigma, niter=niter,
@@ -76,8 +75,8 @@ x.show(title='TV reconstruction', force_show=True)
 
 data *= scale
 x = x.asarray() * scale
-print('GT RMSE = %f, data RMSE = %f' %
-      ((abs(gt - x)**2).sum() / gt.size,
-       (abs((data - Radon(x)).asarray())**2).sum() / data.size))
+print('GT RMSE = %f, data RMSE = %f' % 
+      ((abs(gt - x) ** 2).sum() / gt.size,
+       (abs((data - Radon(x)).asarray()) ** 2).sum() / data.size))
 
 # savemat(join('store', 'polyII_TV'), {'view': x})

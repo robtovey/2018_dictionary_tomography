@@ -3,8 +3,8 @@ Created on 10 Jul 2018
 
 @author: Rob Tovey
 '''
-from code.transport_loss import l2_squared_loss
-from code.regularisation import Joubert, null, Mass, Radius
+from GaussDictCode.transport_loss import l2_squared_loss
+from GaussDictCode.regularisation import Joubert, null, Mass, Radius
 from os.path import join
 from Fourier_Transform import GaussFT, GaussFTVolume
 RECORD = join('store', '2_atoms_3D_GD_rand')
@@ -13,10 +13,12 @@ if RECORD is not None:
     import matplotlib
     matplotlib.use('Agg')
 import odl
-from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
-from code.atomFuncs import GaussTomo, GaussVolume
+from GaussDictCode.dictionary_def import VolSpace, ProjSpace, AtomSpace, AtomElement
+from GaussDictCode.atomFuncs import GaussTomo
 from numpy import sqrt, pi
-from code.bin.manager import myManager
+from GaussDictCode.bin.manager import myManager
+
+raise Exception('FT code has not been updated in a long time')
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
     # Space settings:
@@ -51,16 +53,15 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     c.set(gt.I[:], 1)
     #####
     nAtoms = recon.I.shape[0]
-    Radon = GaussTomo(ASpace, PSpace, device=device)
+    Radon = GaussTomo(ASpace, vol, PSpace, device=device)
     gFT = GaussFT(ASpace)
     dFT = GaussFT(PSpace)
     FT = GaussFTVolume(ASpace, PSpace)
-    view = GaussVolume(ASpace, vol, device=device)
 
-    def vview(a): return view(gFT.inverse(a))
+    def vview(a): return Radon.discretise(gFT.inverse(a))
 
     gt_sino = Radon(gt)
-    gt_view = view(gt)
+    gt_view = Radon.discretise(gt)
 
     # Reconstruction:
     fidelity = l2_squared_loss(dim)
@@ -68,7 +69,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     guess = None
     from NewtonGaussian import linesearch as GD
 
-    GD(gFT(recon), dFT(gt_sino), [100, 1, 100], fidelity, reg, FT, vview,
+    GD(gFT(recon), dFT(gt_sino), [100, 1, 100], fidelity, reg, FT, view=vview,
        gt=gt_view, guess=guess, RECORD=RECORD, tol=1e-10, min_iter=10)
 #     GD(recon, gt_sino, [100, 1, 100], fidelity, reg, Radon, view,
 #        gt=gt_view, guess=guess, RECORD=RECORD, tol=1e-10, min_iter=10)

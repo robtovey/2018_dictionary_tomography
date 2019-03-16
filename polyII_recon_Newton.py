@@ -4,10 +4,10 @@ Created on 28 Jun 2018
 @author: Rob Tovey
 '''
 from os.path import join
-from code.bin.manager import myManager
-from code.dictionary_def import VolElement, AtomElement
+from GaussDictCode.bin.manager import myManager
+from GaussDictCode.dictionary_def import VolElement, AtomElement
 from KL_GaussRadon import doKL_ProjGDStep_iso
-from code import standardGaussTomo
+from GaussDictCode import standardGaussTomo
 RECORD = join('store', 'polyII_rand200_Evren')
 RECORD = None
 from odl.contrib import mrc
@@ -89,13 +89,13 @@ gt = ascontiguousarray(gt[30:70, 30:70, 30:70], dtype='float32')
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
 
-    Radon, view, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
+    Radon, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
         gt=gt, dim=3, device='GPU', isotropic=False,
         angle_range=([-pi / 3, 0], [pi / 3, pi / 2]), angle_num=[61, 1],
         vol_box=[-1, 1], det_box=[-sqrt(3), sqrt(3)], noise=0 * 0.1,
         fidelity='l2_squared', reg=None, solver='Newton'
     )
-#     Radon, view, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
+#     Radon, fidelity, data, ASpace, PSpace, params = standardGaussTomo(
 #         gt=gt, dim=3, device='GPU', isotropic=False,
 #         angle_range=([-pi / 3, 0], [pi / 3, pi / 2]), angle_num=[61 * 4, 1],
 #         vol_box=[-1, 1], det_box=[-sqrt(3), sqrt(3)], det_size=int(40 / 2),
@@ -118,7 +118,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     c.set(recon.r, 2, (slice(None), slice(None, 3)))
 #     c.set(recon.I, 0.01)
     nAtoms = recon.I.shape[0]
-    gt = VolElement(view.ProjectionSpace, gt)
+    gt = Radon.embedding.element(gt)
     R = Radon(recon)
 
 #     from matplotlib import pyplot as plt
@@ -134,7 +134,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     def guess(d, a): return a
     guess = None
 
-    GD(recon, data, [100, 1, 100], fidelity, reg, Radon, view,
+    GD(recon, data, [100, 1, 100], fidelity, reg, Radon,
         gt=gt, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=2000,
        thresh=1.5, angles=((20, 45), (100, 90)))
 
@@ -143,20 +143,20 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
 #     dFT = GaussFT(PSpace)
 #     FT = GaussFTVolume(ASpace, PSpace)
 #
-#     def vview(a): return view(gFT.inverse(a))
-#     GD(gFT(recon), dFT(data), [100, 1, 100], fidelity, reg, FT, vview,
+#     def vview(a): return Radon.discretise(gFT.inverse(a))
+#     GD(gFT(recon), dFT(data), [100, 1, 100], fidelity, reg, FT, view=vview,
 #        gt=gt, guess=guess, RECORD=RECORD, tol=1e-6, min_iter=10,
 #        myderivs=FT.derivs, thresh=1.5, angles=((20, 45), (100, 90)))
 
     print('GT RMSE = %f, data RMSE = %f' % 
-          ((abs((gt - view(recon)).asarray()) ** 2).sum() / gt.asarray().size, (abs((data - Radon(recon)).asarray()) ** 2).sum() / data.asarray().size))
+          ((abs((gt - Radon.discretise(recon)).asarray()) ** 2).sum() / gt.asarray().size, (abs((data - Radon(recon)).asarray()) ** 2).sum() / data.asarray().size))
 
-#     savemat(join('store', 'polyII_recon'), {'view': view(recon).asarray(),
+#     savemat(join('store', 'polyII_recon'), {'view': Radon.discretise(recon).asarray(),
 #                                             'X': c.asarray(recon.x),
 #                                             'R': c.asarray(recon.r),
 #                                             'I': c.asarray(recon.I), })
 
-#     savemat(join('store', 'polyII_recons', 'Gauss_' + str(nAtoms)), {'view': view(recon).asarray(),
+#     savemat(join('store', 'polyII_recons', 'Gauss_' + str(nAtoms)), {'view': Radon.discretise(recon).asarray(),
 #                                                                      'X': c.asarray(recon.x),
 #                                                                      'R': c.asarray(recon.r),
 #                                                                      'I': c.asarray(recon.I), })

@@ -30,7 +30,6 @@ x0, r, I = x0[I.nonzero(), :].squeeze(), r[I.nonzero()], I[I.nonzero()]
 atom_space = AtomSpace(dim)
 atoms = AtomElement(atom_space, x0, r, I)
 
-
 # Compute Radon transform and volume view
 #####
 #     These lines use Gaussian intensities
@@ -55,7 +54,6 @@ plt.title('Atomic phantom')
 plt.figure()
 R.plot(plt)
 plt.title('Computed Sinogram')
-
 
 plt.show()
 print('Shepp Logan demo complete')

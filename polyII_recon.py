@@ -3,7 +3,7 @@ Created on 31 Mar 2018
 
 @author: Rob Tovey
 '''
-from code.transport_loss import l2_squared_loss
+from GaussDictCode.transport_loss import l2_squared_loss
 from os.path import join
 from NewtonGaussian import linesearch as GD
 RECORD = join('store', 'polyII')
@@ -13,12 +13,12 @@ if RECORD is not None:
     matplotlib.use('Agg')
 import odl
 from odl.contrib import mrc
-from code.dictionary_def import VolSpace, ProjSpace, AtomSpace, ProjElement
-from code.atomFuncs import GaussTomo, GaussVolume
+from GaussDictCode.dictionary_def import VolSpace, ProjSpace, AtomSpace, ProjElement
+from GaussDictCode.atomFuncs import GaussTomo
 from numpy import sqrt, zeros, random, arange, asarray, ascontiguousarray, log10
 from matplotlib import pyplot as plt, animation as mv
-from code.bin.manager import myManager
-from code.regularisation import Joubert, null
+from GaussDictCode.bin.manager import myManager
+from GaussDictCode.regularisation import Joubert, null
 
 with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c:
     # Import data:
@@ -71,8 +71,7 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     nAtoms = 50
     recon = newAtoms(nAtoms, 1)
     #####
-    Radon = GaussTomo(ASpace, PSpace, device='GPU')
-    view = GaussVolume(ASpace, vol, device='GPU')
+    Radon = GaussTomo(ASpace, vol, PSpace, device='GPU')
     data = ProjElement(PSpace, data / data.max())
     R = Radon(recon)
     # Reconstruction:
@@ -80,5 +79,5 @@ with myManager(device='cpu', order='C', fType='float32', cType='complex64') as c
     reg = Joubert(dim, 1e-1, 1e+2, (1e-1 ** dim, 1e+3))
     reg = null(dim)
 
-    GD(recon, data, [100, 1], fidelity, reg, Radon, view,
+    GD(recon, data, [100, 1], fidelity, reg, Radon,
        guess=None, RECORD=RECORD)

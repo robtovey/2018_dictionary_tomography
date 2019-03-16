@@ -4,14 +4,14 @@ Created on 21 May 2018
 @author: Rob Tovey
 '''
 from numpy import prod, zeros, sqrt, arange, random, maximum, minimum
-from code.bin.manager import context
+from GaussDictCode.bin.manager import context
 from skimage import measure
 
 
-def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
+def linesearch(recon, data, max_iter, fidelity, reg, Radon, view=None,
                guess=None, tol=1e-4, min_iter=1, **kwargs):
     c, E, F, nAtoms, max_iter, plot = _startup(
-        recon, data, max_iter, view, guess, 1, **kwargs)
+        recon, data, max_iter, Radon, view, guess, 1, **kwargs)
     eps = 1e-8
 
     # Stepsizes
@@ -80,7 +80,7 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view,
     return recon, E[:jj], F[:jj]
 
 
-def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
+def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view=None,
                      dim='xrI', guess=None, tol=1e-4, min_iter=1, **kwargs):
     dim = dim.lower()
     tmp = ''
@@ -93,7 +93,7 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
     dim = tmp
 
     c, E, F, nAtoms, max_iter, plot = _startup(
-        recon, data, max_iter, view, guess, len(dim), **kwargs)
+        recon, data, max_iter, Radon, view, guess, len(dim), **kwargs)
     eps = 1e-8
 
     # Stepsizes
@@ -170,11 +170,10 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view,
     return recon, E[:jj], F[:jj]
 
 
-def norm(x):
-    return sqrt((x * x).sum())
+def norm(x): return sqrt((x * x).sum())
 
 
-def _startup(recon, data, max_iter, view, guess, L, gt=None, RECORD=None, thresh=None, angles=None):
+def _startup(recon, data, max_iter, Radon, view, guess, L, gt=None, RECORD=None, thresh=None, angles=None):
     '''
     recon is element of atom space
     L is number of energy recordings per iter
@@ -196,6 +195,8 @@ def _startup(recon, data, max_iter, view, guess, L, gt=None, RECORD=None, thresh
 
     nAtoms = len(recon)
 
+    if view is None:
+        view = Radon.discretise
     if guess is None:
         tmp = nAtoms
     else:
@@ -320,7 +321,7 @@ def _plot2DwithGT(ax, recon, gt, R, data, E, F, jj):
 #     ax[1, 1].set_title('Data Sinogram')
     (R - data).plot(ax[1, 1], aspect='auto')
 #     from numpy import minimum
-#     ax[1, 1].imshow(minimum(0, (R - data).array), aspect='auto')
+#     ax[1, 1].imshow(minimum(0, (R - data).data), aspect='auto')
     ax[1, 1].set_title('Sinogram Error')
 
     ax[0, 2].plot(F[:jj])
@@ -354,14 +355,14 @@ def _plot3D(ax, recon, R, data, E, F, jj, nAtoms, thresh, angles):
 #     ax[1, 0].set_title('Recon, slice from front')
 
     Slice = int(R.shape[0] / 2)
-    clim = [0, data.array[Slice].real.max()]
+    clim = [0, data.data[Slice].real.max()]
     data.plot(ax[0, 1], Slice=Slice, clim=clim)
     ax[0, 1].set_title('Middle Data Projection')
     R.plot(ax[1, 1], Slice=Slice, clim=clim)
     ax[1, 1].set_title('Middle Recon Projection')
 
     Slice = (jj // (3 * nAtoms)) % R.shape[0]
-    clim = [0, data.array[Slice].real.max()]
+    clim = [0, data.data[Slice].real.max()]
     data.plot(ax[0, 2], Slice=Slice, clim=clim)
     ax[0, 2].set_title('Data Projection')
     R.plot(ax[1, 2], Slice=Slice, clim=clim)
@@ -396,7 +397,7 @@ def _plot3DwithGT(ax, recon, gt, R, data, E, F, jj, nAtoms, thresh, angles):
     ax[1, 1].set_title('Recon, view from orientation: ' + str(angles[1]))
 
 #     n = (round(gt.shape[2] / 2), round(gt.shape[1] / 2))
-#     cax = (gt.array[:, :, n[0]].real.max(), gt.array[:, n[1]].real.max())
+#     cax = (gt.data[:, :, n[0]].real.max(), gt.data[:, n[1]].real.max())
 #     gt.plot(ax[0, 0], Slice=[slice(None), slice(
 #         None), n[0]], vmin=0, vmax=cax[0])
 #     ax[0, 0].set_title('GT, slice from top')
@@ -411,7 +412,7 @@ def _plot3DwithGT(ax, recon, gt, R, data, E, F, jj, nAtoms, thresh, angles):
 #     ax[1, 1].set_title('Recon, slice from front')
 
     Slice = (jj // (3 * nAtoms)) % R.shape[0]
-    clim = [0, data.array[Slice].real.max()]
+    clim = [0, data.data[Slice].real.max()]
     data.plot(ax[0, 2], Slice=Slice, clim=clim)
     ax[0, 2].set_title('Data Projection')
     R.plot(ax[1, 2], Slice=Slice, clim=clim)
@@ -428,9 +429,12 @@ def _plot3DwithGT(ax, recon, gt, R, data, E, F, jj, nAtoms, thresh, angles):
 
 def _get3DvolPlot(ax, img, angle=(45, 0), thresh=None, m=None):
     if m is None:
-        v, f, _, _ = measure.marching_cubes(img, thresh, step_size=0 * int(
-            img.shape[0] / 50) + 1, allow_degenerate=False)
-        m = (v[:, 0], v[:, 1], f, v[:, 2])
+        try:
+            v, f, _, _ = measure.marching_cubes(img, thresh, step_size=0 * int(
+                img.shape[0] / 50) + 1, allow_degenerate=False)
+            m = (v[:, 0], v[:, 1], f, v[:, 2])
+        except Exception:
+            return None
 
     if ax is None:
         from matplotlib import pyplot

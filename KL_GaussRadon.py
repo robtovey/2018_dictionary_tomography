@@ -42,10 +42,10 @@ Case 2: S is upper triangular
 
 @author: Rob Tovey
 '''
-from numpy import log, zeros, sqrt, exp, nansum, linalg, array,\
+from numpy import log, zeros, sqrt, exp, nansum, linalg, array, \
     warnings, maximum, concatenate
 import numba
-from code.bin.manager import context
+from GaussDictCode.bin.manager import context
 from numpy.linalg.linalg import norm
 
 
@@ -66,18 +66,18 @@ def doKL_ProjGDStep_iso(res, atom, t, R):
     dim = atom.x.shape[1]
     iso = (atom.r.shape[1] == 1)
     res += R(atom)
-    f = maximum(0, c.copy(res.array))
+    f = maximum(0, c.copy(res.data))
     if iso:
         Z = 0
     else:
         Z = (0, 0)
         c.set(atom.r[0, dim:], 0)
-#     params = res.array.shape, res.array.dtype
-#     const = 2 * pi * params[0][0] * res.array.size / res.space.volume()
+#     params = res.data.shape, res.data.dtype
+#     const = 2 * pi * params[0][0] * res.data.size / res.space.volume()
 
 #     from matplotlib import pyplot as plt
 #     plt.subplot('131')
-#     plt.imshow(res.array.T)
+#     plt.imshow(res.data.T)
 
     c.set(atom.I[:], 1)
     c.set(atom.x[:], 0)
@@ -112,19 +112,19 @@ def doKL_ProjGDStep_iso(res, atom, t, R):
         else:
             c.set(atom.r[0, :dim], 1 / S)
 
-        RR = R(atom).array
+        RR = R(atom).data
         A = (If.sum() * atom.I[0]) / c.sum(RR)
         RR *= (A / atom.I[0])
         c.set(atom.I[:], A)
 
         if (norm(old[0] - S) > 1e-4 * norm(old[0])) or (norm(old[1] - M.reshape(-1)) > 1e-4 * norm(old[1])) or (norm(old[2] - A) > 1e-4 * norm(old[2])):
-            f = maximum(0, t * res.array + (1 - t) * RR)
+            f = maximum(0, t * res.data + (1 - t) * RR)
         else:
             break
-#         print(M, S, A, KL_2D(f, R(atom).array))
+#         print(M, S, A, KL_2D(f, R(atom).data))
 
 #     plt.subplot('132')
-#     plt.imshow(R(atom).array.T)
+#     plt.imshow(R(atom).data.T)
 #     plt.subplot('133')
 #     plt.imshow(f.T)
 #     plt.show(block=True)
@@ -141,7 +141,7 @@ def doKL_LagrangeStep_iso(res, atom, t, R):
     dim = atom.x.shape[1]
     iso = (atom.r.shape[1] == 1)
     res += R(atom)
-    f = maximum(0, c.copy(res.array))
+    f = maximum(0, c.copy(res.data))
     if iso:
         Z = 0
     else:
@@ -178,13 +178,13 @@ def doKL_LagrangeStep_iso(res, atom, t, R):
         else:
             c.set(atom.r[0, :dim], 1 / S)
 
-        RR = R(atom).array
+        RR = R(atom).data
         A = (If.sum() * atom.I[0]) / c.sum(RR)
         RR *= (A / atom.I[0])
         c.set(atom.I[:], A)
 
         if (norm(old[0] - S) > 1e-4 * norm(old[0])) or (norm(old[1] - M.reshape(-1)) > 1e-4 * norm(old[1])) or (norm(old[2] - A) > 1e-4 * norm(old[2])):
-            Newton_sino_2D(res.array, RR, t, f)
+            Newton_sino_2D(res.data, RR, t, f)
         else:
             break
 
@@ -279,7 +279,7 @@ def orthog_op(If, Ify, t):
     # op = sum_i If[i](1-t[i]t[i]^T)
     # vec = sum_i (1-t[i]t[i]^T)Ify[i]
     op = zeros((Ify.shape[1], Ify.shape[1]), dtype=t.dtype)
-    vec = zeros((Ify.shape[1], ), dtype=t.dtype)
+    vec = zeros((Ify.shape[1],), dtype=t.dtype)
 
     if t.shape[1] == 2:
         if Ify.shape[1] == 2:
