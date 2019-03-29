@@ -47,11 +47,10 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view=None,
             for j in tmp:
                 for __ in range(max_iter[1]):
                     BREAK[1] = True
-                    ___, df = Radon.L2_derivs(recon[j], (data + Radon(recon[j]) - R),
-                                              order=1)
+                    ___, df = Radon.L2_derivs(recon[j], (data + Radon(recon[j]) - R), order=1)
                     df += reg.grad(recon[j])
 
-                    R = _step(recon, Radon, -df, data,
+                    R = _step(recon, Radon, R, -df, data,
                               E, F, dim, iso, j, jj, n, fidelity, reg)
 
                     if E[jj] > E[jj - 1]:
@@ -98,6 +97,8 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view=None,
 
     # Stepsizes
     h = [[1e-2] * nAtoms for _ in dim]
+    
+    Dim = recon.space.dim
 
     if guess is None:
         R = Radon(recon)
@@ -132,10 +133,17 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view=None,
                 for __ in range(max_iter[1]):
                     BREAK[1] = True
                     for t in range(len(dim)):
-                        #                     for t in [1]:
-                        #                         print('Here: ', dim[t])
-                        grad = Radon.grad(recon[j], dim[t], fidelity.grad(
-                            R, data, axis=0)) + reg.grad(recon[j], axis=dim[t])
+                        ___, df = [thing[0] for thing in 
+                                   Radon.L2_derivs(recon[j], (data + Radon(recon[j]) - R), order=1)]
+                        if t == 0:
+                            grad = df[0]
+                        elif t == 1:
+                            grad = df[1:1 + Dim]
+                        else:
+                            grad = df[1 + Dim:]
+
+                        # TODO: integrate regulariser and fidelity again
+                        grad += reg.grad(recon[j], axis=dim[t])
                         T = c.asarray(getattr(recon, dim[t])[j])
                         old = T.copy()
                         tmp = 1 / max(norm(grad), eps)
@@ -277,7 +285,8 @@ def _startup(recon, data, max_iter, Radon, view, guess, L, gt=None, RECORD=None,
             else:
                 print('%.2f, %.2f, % 5.3f' % (n / nAtoms,
                                               i / max_iter[0], E[jj - 1]))
-                plt.pause(.1)
+                plt.draw()
+                plt.pause(.01)
                 plotter(recon[:n], r, e, f, jj)
                 plt.show(block=False)
 
@@ -384,13 +393,13 @@ def _plot3DwithGT(ax, recon, gt, R, data, E, F, jj, nAtoms, thresh, angles):
     tmp = gt.asarray()
     m = _get3DvolPlot(ax[0, 0], tmp, angle=angles[0], thresh=thresh)
     ax[0, 0].set_title('GT, view from orientation: ' + str(angles[0]))
-    m = _get3DvolPlot(ax[0, 1], tmp, angle=angles[1], m=m)
+    _get3DvolPlot(ax[0, 1], tmp, angle=angles[1], m=m)
     ax[0, 1].set_title('GT, view from orientation: ' + str(angles[1]))
 
     try:
         tmp = recon.asarray()
         m = _get3DvolPlot(ax[1, 0], tmp, angle=angles[0], thresh=thresh)
-        m = _get3DvolPlot(ax[1, 1], tmp, angle=angles[1], m=m)
+        _get3DvolPlot(ax[1, 1], tmp, angle=angles[1], m=m)
     except Exception:
         pass
     ax[1, 0].set_title('Recon, view from orientation: ' + str(angles[0]))
@@ -430,10 +439,9 @@ def _plot3DwithGT(ax, recon, gt, R, data, E, F, jj, nAtoms, thresh, angles):
 def _get3DvolPlot(ax, img, angle=(45, 0), thresh=None, m=None):
     if m is None:
         try:
-            v, f, _, _ = measure.marching_cubes(img, thresh, step_size=0 * int(
-                img.shape[0] / 50) + 1, allow_degenerate=False)
+            v, f, _, _ = measure.marching_cubes_lewiner(img, thresh, allow_degenerate=False)
             m = (v[:, 0], v[:, 1], f, v[:, 2])
-        except Exception:
+        except Exception as e:
             return None
 
     if ax is None:
@@ -481,9 +489,10 @@ def __makeVid(*args, stage=0, fps=5):
         args[1].show(block=True)
 
 
-def _step(recon, Radon, d, data, E, F, dim, iso, j, jj, n, fidelity, reg):
+def _step(recon, Radon, R, d, data, E, F, dim, iso, j, jj, n, fidelity, reg):
     c = context()
 
+    R_old = Radon(recon[j])
     I = c.asarray(recon.I[j:j + 1]).copy()
     x = c.asarray(recon.x[j]).copy()
     r = c.asarray(recon.r[j]).copy()
@@ -512,7 +521,8 @@ def _step(recon, Radon, d, data, E, F, dim, iso, j, jj, n, fidelity, reg):
                 rr[2] = -rr[2]
     c.set(recon.r[j], rr)
     
-    R = Radon(recon[:n])
+    R, R_old = R + Radon(recon[j]) - R_old, R
+#     R = Radon(recon[:n])
     F[jj] = fidelity(R, data)
     E[jj] = F[jj] + reg(recon[:n])
 
@@ -520,6 +530,7 @@ def _step(recon, Radon, d, data, E, F, dim, iso, j, jj, n, fidelity, reg):
         c.set(recon.I[j:j + 1], I)
         c.set(recon.x[j], x)
         c.set(recon.r[j], r)
-        R = Radon(recon[:n])
+        R = R_old
+#         R = Radon(recon[:n])
     
     return R

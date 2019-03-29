@@ -57,107 +57,16 @@ class DictionaryOp(Operator):
         '''
         raise NotImplementedError
 
-# class Space:
-# 
-#     def __init__(self, dtype):
-#         self.isLinear = False
-#         self.dtype = dtype
-# 
-#     def zero(self):
-#         return Element(self)
-# 
-#     def copy(self):
-#         return Space(self.dtype)
-# 
-# 
-# class Element:
-#     __array_ufunc__ = None
-#     # This is necessary to prevent numpy calling __array_wrap__
-#     __array_priority__ = 100
-# 
-#     def __init__(self, space):
-#         self.space = space
-#         self.array = None
-# 
-#     def asarray(self):
-#         return context().asarray(self.array)
-# 
-#     def copy(self):
-#         return Element(self.space)
-# 
-#     def prnt(self):
-#         print(super(self))
-# 
-#     def __neg__(self):
-#         return type(self)(self.space, context().mul(self.array, -1))
-# 
-#     def __add__(self, other):
-#         c = context()
-#         if isinstance(other, type(self)):
-#             return type(self)(
-#                 self.space,
-#                 c.add(self.array, other.array)
-#             )
-#         else:
-#             return type(self)(
-#                 self.space,
-#                 c.add(self.array, asarray(other))
-#             )
-# 
-#     def __radd__(self, other):
-#         return type(self)(
-#             self.space,
-#             context().add(self.array, asarray(other))
-#         )
-# 
-#     def __iadd__(self, other):
-#         c = context()
-#         if isinstance(other, type(self)):
-#             c.add(self.array, other.array, self.array)
-#         else:
-#             c.add(self.array, asarray(other), self.array)
-#         return self
-# 
-#     def __mul__(self, s):
-#         if isinstance(s, type(self)):
-#             return type(self)(
-#                 self.space,
-#                 context().mul(self.array, s.array)
-#             )
-#         else:
-#             return type(self)(
-#                 self.space,
-#                 context().mul(self.array, asarray(s))
-#             )
-# 
-#     def __rmul__(self, s):
-#         return self.__mul__(s)
-# 
-#     def __imul__(self, s):
-#         if isinstance(s, type(self)):
-#             context().mul(self.array, s.array, self.array)
-#         else:
-#             context().mul(self.array, asarray(s), self.array)
-#         return self
-# 
-#     def __sub__(self, other):
-#         if isinstance(other, type(self)):
-#             return type(self)(
-#                 self.space,
-#                 context().sub(self.array, other.array)
-#             )
-#         else:
-#             return type(self)(
-#                 self.space,
-#                 context().sub(self.array, asarray(other))
-#             )
-# 
-#     def __isub__(self, other):
-#         if isinstance(other, type(self)):
-#             context().sub(self.array, other.array, self.array)
-#         else:
-#             context().sub(self.array, asarray(other), self.array)
-#         return self
+
+class directionalGradient(Operator):
+
+    def __init__(self, x0, domain, func):
+        shape = [x0.size, 1 + x0.x.shape[1] + x0.r.shape[1]]
+        space = uniform_discr([0] * 2, shape, shape)
+        Operator.__init__(self, domain, space, linear=True)
+        self.x0, self.__func = x0, func
+    
+    def _call(self, y): return self.__func(self.x0, y)
 
 
 class AtomSpace(LinearSpace):
@@ -383,11 +292,15 @@ class ProjSpace(LinearSpace):
 
     def _norm(self, x): return norm(x.data.reshape(-1))
 
+    def _inner(self, x1, x2): return x1.data.reshape(1, -1).dot(x2.data.reshape(-1, 1))
+
     def zero(self, Slice=slice(None)):
         if Slice == slice(None):
             return ProjElement(self, 0)
         else:
             return ProjElement(self[Slice], 0)
+
+    def one(self): return ProjElement(self, 1)
 
     def random(self, Slice=slice(None)):
         if Slice == slice(None):

@@ -4,9 +4,9 @@ Created on 4 Jan 2018
 @author: Rob Tovey
 '''
 import numpy as np
-from numpy import cos, sqrt, empty, sin
+from numpy import cos, sqrt, empty, sin, vstack
 import numba
-from GaussDictCode.dictionary_def import DictionaryOp
+from GaussDictCode.dictionary_def import DictionaryOp, directionalGradient
 from GaussDictCode.bin.manager import context
 
 
@@ -95,7 +95,7 @@ basis so it is 1 codim and can be factored out of the projection.
         if self.__device == 'cpu':
             raise ValueError('CPU processing not yet supported')
 
-        self.__fwrd, self.__derivs, self.__proj = self._getOps(Atoms.dim)
+        self.__fwrd, self.__derivs, self.__L2derivs, self.__proj = self._getOps(Atoms.dim)
 
         c = context()
 #         self.__params = (c.copy(Sino.orientations),
@@ -110,7 +110,7 @@ basis so it is 1 codim and can be factored out of the projection.
             import GaussDictCode.bin.NewtonBases as myRad
         else:
             raise ValueError
-        return myRad.RadProj, myRad.L2derivs_RadProj, myRad.VolProj
+        return myRad.RadProj, myRad.derivs_RadProj, myRad.L2derivs_RadProj, myRad.VolProj
 
     def __call__(self, atoms, out=None):
         if out is None:
@@ -124,9 +124,34 @@ basis so it is 1 codim and can be factored out of the projection.
         self.__proj(atoms, self.__vol, out.data)
         return out
 
+    def _stackAtoms(self, atoms):
+        return self.domain.element(vstack(atoms))
+        
+    def derivs(self, atoms, C, order=2):
+        f, df, ddf = [], [], []
+        for i in range(atoms.size):
+            tmp = self.__derivs(atoms[i], self, C.data, order)
+            f.append(tmp[0])
+            df.append(tmp[1][None, :])
+            ddf.append(tmp[2][None, :, :])
+        f, df, ddf = [vstack(thing) for thing in (f, df, ddf)]
+
+        if order == 1:
+            return f, df
+        else:
+            return f, df, ddf
+        
+    def gradient(self, x): return directionalGradient(x, self.range, lambda x, d: self.derivs(x, d, order=1)[1])
+
     def L2_derivs(self, atoms, C, order=2):
-        f, df, ddf = self.__derivs(
-            atoms, self, C.data, order)
+        f, df, ddf = [], [], []
+        for i in range(atoms.size):
+            tmp = self.__L2derivs(atoms[i], self, C.data, order)
+            f.append(tmp[0])
+            df.append(tmp[1][None, :])
+            ddf.append(tmp[2][None, :, :])
+        f, df, ddf = [vstack(thing) for thing in (f, df, ddf)]
+
         if order == 1:
             return f, df
         else:
@@ -144,7 +169,7 @@ at many low resolution images.
         if dim not in (2, 3):
             raise ValueError
         import GaussDictCode.bin.point_spread_functions as myRad
-        return myRad.RadProj, myRad.L2derivs_RadProj, myRad.VolProj
+        return myRad.RadProj, myRad.derivs_RadProj, myRad.L2derivs_RadProj, myRad.VolProj
 
 
 def test_grad(space, Radon, eps, axis=None):

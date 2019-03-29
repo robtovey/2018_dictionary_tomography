@@ -37,7 +37,8 @@ __derivs_dRf = derivatives of |Rf-C|^2
 # Radial basis:
 
 
-@cuda.jit('f4(f4)', device=True, inline=True)
+# @cuda.jit('f4(f4)', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __g(n):
     if n > 1:
         return 0
@@ -45,7 +46,8 @@ def __g(n):
         return c_exp(-30 * n) * c_sqrt(30 / pi)
 
 
-@cuda.jit('f4(f4)', device=True, inline=True)
+# @cuda.jit('f4(f4)', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __Rg(n):
     # int exp(-(x^2+n)/2)/sqrt(2pi) dx = exp(-n/2)
     if n > 1:
@@ -54,7 +56,8 @@ def __Rg(n):
         return c_exp(-30 * n)
 
 
-@cuda.jit('void(f4,f4[:])', device=True, inline=True)
+# @cuda.jit('void(f4,f4[:])', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __dRg(n, dg):
     # R = exp(-n/2)
     # dR = -R/2, ddR = R/4
@@ -231,7 +234,8 @@ def __dRg(n, dg):
 #         dg[0] = tmp0 * tmp1
 
 
-@cuda.jit('f4(f4,f4[:],f4[:],f4[:])', device=True, inline=True)
+# @cuda.jit('f4(f4,f4[:],f4[:],f4[:])', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __f(I, x, r, y):
     iso = (r.shape[0] == 1)
     Y, rY = cuda.local.array((DIM,), f4), cuda.local.array((DIM,), f4)
@@ -253,7 +257,8 @@ def __f(I, x, r, y):
     return I * __g(n)
 
 
-@cuda.jit('f4(f4,f4[:],f4[:],f4[:], f4[:])', device=True, inline=True)
+# @cuda.jit('f4(f4,f4[:],f4[:],f4[:], f4[:])', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __Rf(I, x, r, y, T):
     Y, rY, rT, MY = cuda.local.array((DIM,), f4), cuda.local.array(
         (DIM,), f4), cuda.local.array((DIM,), f4), cuda.local.array((DIM,), f4)
@@ -305,7 +310,8 @@ def __Rf(I, x, r, y, T):
     return I * __Rg(m) * n
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True)
+# @cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __dRf_aniso(I, x, r, y, tt, R, dR, ddR, order):
     # __Rf = I*__Rg(|M(y-x)|^2)/|rT|
     Y, rY, rT, MY = cuda.local.array((DIM,), f4), cuda.local.array(
@@ -521,7 +527,8 @@ def __dRf_aniso(I, x, r, y, tt, R, dR, ddR, order):
                     ddR[i, j] = ddR[j, i]
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True)
+# @cuda.jit('void(f4,f4[:],f4[:],f4[:],f4[:], f4[:],f4[:],f4[:,:],i4)', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __dRf_iso(I, x, r, y, tt, R, dR, ddR, order):
     # __Rf = I*__Rg(|M(y-x)|^2)/|rT|
     Y, rY, MY = cuda.local.array((DIM,), f4), cuda.local.array(
@@ -665,14 +672,16 @@ def __dRf_iso(I, x, r, y, tt, R, dR, ddR, order):
                     ddR[i, j] = ddR[j, i]
 
 
-@cuda.jit('void(f4,f4,f4[:,:],f4[:,:],i4,f4[:])', device=True, inline=True)
+# @cuda.jit('void(f4,f4,f4[:,:],f4[:,:],i4,f4[:])', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __tovec3D(p0, p1, w0, w1, i, Y):
     Y[0] = p0 * w0[i, 0] + p1 * w1[i, 0]
     Y[1] = p0 * w0[i, 1] + p1 * w1[i, 1]
     Y[2] = p0 * w0[i, 2] + p1 * w1[i, 2]
 
 
-@cuda.jit('void(f4,f4,f4[:,:],f4[:,:],i4,f4[:])', device=True, inline=True)
+# @cuda.jit('void(f4,f4,f4[:,:],f4[:,:],i4,f4[:])', device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __tovec2p5D(p0, p1, w0, w1, i, Y):
     Y[0] = p0 * w0[i, 0]
     Y[1] = p0 * w0[i, 1]
@@ -686,7 +695,8 @@ def VolProj(atom, y, u):
               ](atom.I, atom.x, atom.r, *y, u)
 
 
-@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:],f4[:,:,:])', inline=True)
+# @cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:],f4[:,:,:])', inline=True)
+@cuda.jit(inline=True)
 def __VolProj(I, x, r, y0, y1, y2, u):
     jj, kk, ll = cuda.grid(DIM)
     if jj >= y0.shape[0] or kk >= y1.shape[0] or ll >= y2.shape[0]:
@@ -716,7 +726,8 @@ def RadProj(atom, Rad, R):
                      (tpb, tpb, tpb)](atom.I, atom.x, atom.r, t, w[0], w[1], p[0], p[1], R)
 
 
-@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])', inline=True)
+# @cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])', inline=True)
+@cuda.jit(inline=True)
 def __RadProj_3D(I, x, r, t, w0, w1, p0, p1, R):
     jj, k0, k1 = cuda.grid(DIM)
     if jj >= t.shape[0] or k0 >= p0.shape[0] or k1 >= p1.shape[0]:
@@ -730,7 +741,8 @@ def __RadProj_3D(I, x, r, t, w0, w1, p0, p1, R):
     R[jj, k0, k1] = tmp
 
 
-@cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])', inline=True)
+# @cuda.jit('void(f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:])', inline=True)
+@cuda.jit(inline=True)
 def __RadProj_2p5D(I, x, r, t, w0, w1, p0, p1, R):
     jj, k0, k1 = cuda.grid(DIM)
     if jj >= t.shape[0] or k0 >= p0.shape[0] or k1 >= p1.shape[0]:
@@ -769,15 +781,16 @@ def L2derivs_RadProj(atom, Rad, C, order=2):
 
     if iso:
         __L2derivs_RadProj_iso_3D[block, THREADS](atom.I[0], atom.x[0], atom.r[0], t, w[0], w[1],
-                                                p[0], p[1], C, f, Df, DDf, array(sz, dtype='i4'), array(order, dtype='i4'))
+                                                p[0], p[1], C, f, Df, DDf, array(sz, dtype='i4'), order)
     else:
         __L2derivs_RadProj_aniso_3D[block, THREADS](atom.I[0], atom.x[0], atom.r[0], t, w[0], w[1],
-                                                  p[0], p[1], C, f, Df, DDf, array(sz, dtype='i4'), array(order, dtype='i4'))
+                                                  p[0], p[1], C, f, Df, DDf, array(sz, dtype='i4'), order)
 
     return f.sum(axis=-1), Df.sum(axis=-1), DDf.sum(axis=-1)
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+# @cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+@cuda.jit(inline=True)
 def __L2derivs_RadProj_aniso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, order):
     '''
     Computes the 0, 1 and 2 order derivatives of |R(I,x,r)-C|^2/2 for a single atom
@@ -857,7 +870,8 @@ def __L2derivs_RadProj_aniso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, o
             i += 1
 
 
-@cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+# @cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+@cuda.jit(inline=True)
 def __L2derivs_RadProj_iso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, order):
     '''
     Computes the 0, 1 and 2 order derivatives of |R(I,x,r)-C|^2/2 for a single atom
@@ -906,6 +920,207 @@ def __L2derivs_RadProj_iso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, ord
                     DDF[j0, j1] += dR[j0] * dR[j1] + R[0] * ddR[j0, j1]
 
     F[0] *= 0.5
+    for i0 in range(DDF.shape[0] - 1):
+        for i1 in range(i0 + 1, DDF.shape[0]):
+            DDF[i1, i0] = DDF[i0, i1]
+
+    # Sum over threads
+    buf[thread, 0] = F[0]
+    i = 1
+    for i0 in range(5):
+        buf[thread, i] = DF[i0]
+        i += 1
+    for i0 in range(5):
+        for i1 in range(i0 + 1):
+            buf[thread, i] = DDF[i0, i1]
+            i += 1
+
+    __GPU_reduce_n(buf, 21)
+    if thread == 0:
+        f[block] = buf[0, 0]
+        i = 1
+        for i0 in range(5):
+            Df[i0, block] = buf[0, i]
+            i += 1
+        for i0 in range(5):
+            for i1 in range(i0):
+                DDf[i0, i1, block] = buf[0, i]
+                DDf[i1, i0, block] = buf[0, i]
+                i += 1
+            DDf[i0, i0, block] = buf[0, i]
+            i += 1
+
+
+def derivs_RadProj(atom, Rad, C, order=2):
+    '''
+    Returns:
+        R(atom)\cdot C = real number
+        dR(atom)/da\cdot C = vector of shape (I,x,r)
+        d^2R(atom)/da^2\cdot C = square matrix of shape (I,x,r)
+    '''
+    S = Rad.range
+    t, w, p = S.orientations, S.ortho, S.detector
+    if hasattr(C, 'asarray'):
+        C = C.asarray()
+    iso = atom.space.isotropic
+
+    block = w[0].shape[0]
+    sz = [w[0].shape[0], p[0].shape[0], p[1].shape[0],
+          (w[0].shape[0] * p[0].shape[0] * p[1].shape[0]) // (THREADS * block)]
+    if sz[3] * THREADS * block < sz[0] * sz[1] * sz[2]:
+        sz[3] += 1
+
+    if iso:
+        f, Df, DDf = empty((block,), dtype='f4'), empty(
+            (5, block), dtype='f4'), empty((5, 5, block), dtype='f4')
+    else:
+        f, Df, DDf = empty((block,), dtype='f4'), empty(
+            (10, block), dtype='f4'), empty((10, 10, block), dtype='f4')
+
+    if len(w) == 1:
+        w = (w[0], empty((1, 1), dtype='f4'))
+
+    if iso:
+        __derivs_RadProj_iso_3D[block, THREADS](atom.I[0], atom.x[0], atom.r[0], t, w[0], w[1],
+                                                p[0], p[1], C, f, Df, DDf, array(sz, dtype='i4'), order)
+    else:
+        __derivs_RadProj_aniso_3D[block, THREADS](atom.I[0], atom.x[0], atom.r[0], t, w[0], w[1],
+                                                  p[0], p[1], C, f, Df, DDf, array(sz, dtype='i4'), order)
+
+    return f.sum(axis=-1), Df.sum(axis=-1), DDf.sum(axis=-1)
+
+
+# @cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+@cuda.jit(inline=True)
+def __derivs_RadProj_aniso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, order):
+    '''
+    Computes the 0, 1 and 2 order derivatives of |R(I,x,r)-C|^2/2 for a single atom
+    '''
+    buf = cuda.shared.array((THREADS, 66), f4)
+    F = cuda.local.array((1,), f4)
+    DF = cuda.local.array((10,), f4)
+    DDF = cuda.local.array((10, 10), f4)
+    R = cuda.local.array((1,), f4)
+    dR = cuda.local.array((10,), f4)
+    ddR = cuda.local.array((10, 10), f4)
+    Y = cuda.local.array((DIM,), f4)
+
+    is3D = (w0.shape[0] == w1.shape[0])
+
+    block, thread = cuda.blockIdx.x, cuda.threadIdx.x
+    cc = cuda.grid(1)
+
+    # Zero fill
+    F[0] = 0
+    for i in range(10):
+        DF[i] = 0
+        for j in range(10):
+            DDF[i, j] = 0
+
+    for indx in range(sz[3] * cc, sz[3] * (cc + 1)):
+        T = indx // (sz[1] * sz[2])
+        i0 = (indx // sz[2]) - sz[1] * T
+        i1 = indx - sz[2] * (i0 + sz[1] * T)
+        if T < sz[0]:
+            # Y = p0*w0[T] + p1*w1[T]
+            if is3D:
+                __tovec3D(p0[i0], p1[i1], w0, w1, T, Y)
+            else:
+                __tovec2p5D(p0[i0], p1[i1], w0, w1, T, Y)
+
+            # Derivatives of atom
+            __dRf_aniso(I, x, r, Y, t[T], R, dR, ddR, order)
+            # Derivatives of R\cdot C
+            scale = C[T, i0, i1]
+            F[0] += R[0] * scale
+            for j0 in range(10):
+                DF[j0] += dR[j0] * scale
+                for j1 in range(j0, 10):
+                    DDF[j0, j1] += ddR[j0, j1] * scale
+
+    for i0 in range(DDF.shape[0] - 1):
+        for i1 in range(i0 + 1, DDF.shape[0]):
+            DDF[i1, i0] = DDF[i0, i1]
+
+    # Sum over threads
+    buf[thread, 0] = F[0]
+    i = 1
+    for i0 in range(10):
+        buf[thread, i] = DF[i0]
+        i += 1
+    for i0 in range(10):
+        for i1 in range(i0 + 1):
+            buf[thread, i] = DDF[i0, i1]
+            i += 1
+
+    __GPU_reduce_n(buf, 66)
+    if thread == 0:
+        f[block] = buf[0, 0]
+        i = 1
+        for i0 in range(10):
+            Df[i0, block] = buf[0, i]
+            i += 1
+        for i0 in range(10):
+            for i1 in range(i0):
+                DDf[i0, i1, block] = buf[0, i]
+                DDf[i1, i0, block] = buf[0, i]
+                i += 1
+            DDf[i0, i0, block] = buf[0, i]
+            i += 1
+
+
+# @cuda.jit('void(f4,f4[:],f4[:],f4[:,:],f4[:,:],f4[:,:],f4[:],f4[:],f4[:,:,:], f4[:],f4[:,:],f4[:,:,:],i4[:],i4)', inline=True)
+@cuda.jit(inline=True)
+def __derivs_RadProj_iso_3D(I, x, r, t, w0, w1, p0, p1, C, f, Df, DDf, sz, order):
+    '''
+    Computes the 0, 1 and 2 order derivatives of |R(I,x,r)-C|^2/2 for a single atom
+    '''
+    buf = cuda.shared.array((THREADS, 21), f4)
+    F = cuda.local.array((1,), f4)
+    DF = cuda.local.array((5,), f4)
+    DDF = cuda.local.array((5, 5), f4)
+    R = cuda.local.array((1,), f4)
+    dR = cuda.local.array((5,), f4)
+    ddR = cuda.local.array((5, 5), f4)
+    Y = cuda.local.array((DIM,), f4)
+
+    is3D = (w0.shape[0] == w1.shape[0])
+
+    block, thread = cuda.blockIdx.x, cuda.threadIdx.x
+    cc = cuda.grid(1)
+
+    # Zero fill
+    F[0] = 0
+    for i in range(5):
+        DF[i] = 0
+        for j in range(5):
+            DDF[i, j] = 0
+
+    for indx in range(sz[3] * cc, sz[3] * (cc + 1)):
+        T = indx // (sz[1] * sz[2])
+        i0 = (indx // sz[2]) - sz[1] * T
+        i1 = indx - sz[2] * (i0 + sz[1] * T)
+        if T < sz[0]:
+            # Y = p0*w0[T] + p1*w1[T]
+            if is3D:
+                __tovec3D(p0[i0], p1[i1], w0, w1, T, Y)
+            else:
+                __tovec2p5D(p0[i0], p1[i1], w0, w1, T, Y)
+
+            # Derivatives of atom
+            __dRf_iso(I * C[T, i0, i1], x, r, Y, t[T], R, dR, ddR, order)
+
+            # Derivatives of R\cdot C which has already been pre-multiplied to I
+            F[0] += R[0]
+            scale = 1 / C[T, i0, i1]
+            DF[0] += dR[0] * scale
+            for j1 in range(10):
+                DDF[0, j1] += ddR[0, j1] * scale
+            for j0 in range(1, 10):
+                DF[j0] += dR[j0]
+                for j1 in range(j0, 10):
+                    DDF[j0, j1] += ddR[j0, j1]
+
     for i0 in range(DDF.shape[0] - 1):
         for i1 in range(i0 + 1, DDF.shape[0]):
             DDF[i1, i0] = DDF[i0, i1]

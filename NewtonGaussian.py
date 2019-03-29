@@ -56,20 +56,14 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view=None,
             for j in tmp:
                 for __ in range(max_iter[1]):
                     BREAK[1] = True
-                    ___, df, ddf = Radon.L2_derivs(
-                        recon[j], (data + Radon(recon[j]) - R))
+                    ___, df, ddf = [thing[0] for thing in 
+                                    Radon.L2_derivs(recon[j], (data + Radon(recon[j]) - R))]
 #                     f += reg(recon[j])
                     df += reg.grad(recon[j])
                     try:
                         ddf += reg.hess(recon[j])[0]
                     except TypeError:
                         ddf += reg.hess(recon[j])
-                        
-#                     print(df * 0.021875000558793545 ** 2, '\n')
-#                     print(ddf * 0.021875000558793545 ** 2)
-#                     print(df, '\n')
-#                     print(ddf)
-#                     exit()
                     
                     H = 1 / h[j]
 #                     H = max(0, H - eigvalsh(ddf).min())
@@ -81,14 +75,10 @@ def linesearch(recon, data, max_iter, fidelity, reg, Radon, view=None,
                     except Exception as e:
                         raise e
 
-                    R = _step(recon, Radon, dx, data,
+                    R = _step(recon, Radon, R, dx, data,
                               E, F, dim, iso, j, jj, n, fidelity, reg)
 
                     if E[jj] > E[jj - 1]:
-#                         c.set(recon.I[j:j + 1], I)
-#                         c.set(recon.x[j], x)
-#                         c.set(recon.r[j], r)
-#                         R = Radon(recon[:n])
                         E[jj] = E[jj - 1]
                         if h[j] > 2 * eps:
                             BREAK[0] = False
@@ -163,8 +153,8 @@ def linesearch_block(recon, data, max_iter, fidelity, reg, Radon, view=None,
                         T = c.asarray(getattr(recon, dim[t])[j])
                         old = T.copy()
 
-                        ___, df, ddf = Radon.L2_derivs(
-                            recon[j], (data + Radon(recon[j]) - R))
+                        ___, df, ddf = [thing[0] for thing in 
+                                        Radon.L2_derivs(recon[j], (data + Radon(recon[j]) - R))]
                         df += reg.grad(recon[j])
                         ddf += reg.hess(recon[j])
 

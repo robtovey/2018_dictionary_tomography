@@ -8,7 +8,8 @@ import numba
 THREADS = 128
 
 
-@cuda.jit("void(f4[:])", device=True, inline=True)
+# @cuda.jit("void(f4[:])", device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __GPU_reduce_1(x):
     cc = cuda.threadIdx.x
     cuda.syncthreads()
@@ -37,7 +38,8 @@ def __GPU_reduce_1(x):
         x[cc] += x[cc + 1]
 
 
-@cuda.jit("void(f4[:,:])", device=True, inline=True)
+# @cuda.jit("void(f4[:,:])", device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __GPU_reduce_2(x):
     cc = cuda.threadIdx.x
     cuda.syncthreads()
@@ -78,7 +80,8 @@ def __GPU_reduce_2(x):
         x[cc, 1] += x[cc + 1, 1]
 
 
-@cuda.jit("void(f4[:,:])", device=True, inline=True)
+# @cuda.jit("void(f4[:,:])", device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __GPU_reduce_3(x):
     cc = cuda.threadIdx.x
     cuda.syncthreads()
@@ -127,7 +130,8 @@ def __GPU_reduce_3(x):
         x[cc, 2] += x[cc + 1, 2]
 
 
-@cuda.jit("void(f4[:,:],i4)", device=True, inline=True)
+# @cuda.jit("void(f4[:,:],i4)", device=True, inline=True)
+@cuda.jit(device=True, inline=True)
 def __GPU_reduce_n(x, n):
     cc = cuda.threadIdx.x
     cuda.syncthreads()
@@ -172,9 +176,10 @@ def __GPU_reduce_n(x, n):
     if cc < 1:
         for i in range(n):
             x[cc, i] += x[cc + 1, i]
+    cuda.syncthreads()
 
 
-@cuda.jit('void(f4[:],f4[:],i4[:])')
+@cuda.jit  # ('void(f4[:],f4[:],i4[:])')
 def __GPU_fill_F(x, y, sz):
     cc = cuda.grid(1)
     start = sz[0] * cc
@@ -187,7 +192,7 @@ def __GPU_fill_F(x, y, sz):
             x[indx] = y[indx]
 
 
-@cuda.jit('void(c8[:],c8[:],i4[:])')
+@cuda.jit  # ('void(c8[:],c8[:],i4[:])')
 def __GPU_fill_C(x, y, sz):
     cc = cuda.grid(1)
     start = sz[0] * cc
@@ -200,7 +205,7 @@ def __GPU_fill_C(x, y, sz):
             x[indx] = y[indx]
 
 
-@cuda.jit('void(f4[:,:],f4[:,:],i4[:])')
+@cuda.jit  # ('void(f4[:,:],f4[:,:],i4[:])')
 def __GPU_fill2(x, y, sz):
     cc = cuda.grid(1)
     for indx in range(sz[2] * cc, sz[2] * (cc + 1)):
@@ -213,7 +218,7 @@ def __GPU_fill2(x, y, sz):
                 x[jj, kk] = y[jj, kk]
 
 
-@cuda.jit('void(c8[:,:],c8[:,:],i4[:])')
+@cuda.jit  # ('void(c8[:,:],c8[:,:],i4[:])')
 def __GPU_fill2_C(x, y, sz):
     cc = cuda.grid(1)
     for indx in range(sz[2] * cc, sz[2] * (cc + 1)):
@@ -226,7 +231,7 @@ def __GPU_fill2_C(x, y, sz):
                 x[jj, kk] = y[jj, kk]
 
 
-@cuda.jit('void(f4[:,:],f4[:,:],f4[:,:],i4[:])')
+@cuda.jit  # ('void(f4[:,:],f4[:,:],f4[:,:],i4[:])')
 def __GPU_mult2_R(x, y, out, sz):
     cc = cuda.grid(1)
     for indx in range(sz[2] * cc, sz[2] * (cc + 1)):
@@ -236,7 +241,7 @@ def __GPU_mult2_R(x, y, out, sz):
             out[jj, kk] = x[jj, kk] * y[jj, kk]
 
 
-@cuda.jit('void(c8[:,:],c8[:,:],c8[:,:],i4[:])')
+@cuda.jit  # ('void(c8[:,:],c8[:,:],c8[:,:],i4[:])')
 def __GPU_mult2_C(x, y, out, sz):
     cc = cuda.grid(1)
     for indx in range(sz[2] * cc, sz[2] * (cc + 1)):
@@ -246,7 +251,7 @@ def __GPU_mult2_C(x, y, out, sz):
             out[jj, kk] = x[jj, kk] * y[jj, kk]
 
 
-@cuda.jit('void(c8[:,:],c8[:,:],c8[:,:],i4[:])')
+@cuda.jit  # ('void(c8[:,:],c8[:,:],c8[:,:],i4[:])')
 def __GPU_mult2_Cconj(x, y, out, sz):
     cc = cuda.grid(1)
     for indx in range(sz[2] * cc, sz[2] * (cc + 1)):
@@ -257,7 +262,7 @@ def __GPU_mult2_Cconj(x, y, out, sz):
             out[jj, kk] = x[jj, kk] * tmp
 
 
-@cuda.jit('void(c8[:,:],f4[:],i4[:])')
+@cuda.jit  # ('void(c8[:,:],f4[:],i4[:])')
 def __GPU_sum2_C2R(x, out, sz):
     buf = cuda.shared.array(THREADS, dtype=numba.float32)
     cc = cuda.grid(1)
@@ -276,7 +281,7 @@ def __GPU_sum2_C2R(x, out, sz):
         out[0] = buf[0]
 
 
-@cuda.jit("void(f4[:],f4[:],i4)")
+@cuda.jit  # ("void(f4[:],f4[:],i4)")
 def __GPU_reduce_flex_F(x, out, sz):
     tid = cuda.threadIdx.x
     i = cuda.blockIdx.x * (2 * THREADS) + tid
@@ -298,7 +303,7 @@ def __GPU_reduce_flex_F(x, out, sz):
         out[cuda.blockIdx.x] = buf[0]
 
 
-@cuda.jit("void(c8[:],f4[:,:],i4)")
+@cuda.jit  # ("void(c8[:],f4[:,:],i4)")
 def __GPU_reduce_flex_C(x, out, sz):
     tid = cuda.threadIdx.x
     i = cuda.blockIdx.x * (2 * THREADS) + tid
